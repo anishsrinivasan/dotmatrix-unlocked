@@ -240,15 +240,16 @@ HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", 
 
 def _hook_command(port: int) -> str:
     if WIN:  # no POSIX shell guaranteed; a tiny python helper that always exits 0
-        return subprocess.list2cmdline([sys.executable, "-m", "dotmatrix_unlocked", "hook", "--port", str(port)])
+        return subprocess.list2cmdline([sys.executable, "-m", "dotmatrix_unlocked", "--port", str(port), "hook"])
     # curl is ~10x faster to start than python, and this runs on every tool call; never blocks Claude
     return (f"curl -s -m 1 -H 'Content-Type: application/json' --data-binary @- "
             f"http://127.0.0.1:{port}/event >/dev/null 2>&1 || true")
 
 
 def _is_ours(group: dict) -> bool:
-    return any("/event" in h.get("command", "") and ("127.0.0.1" in h["command"] or "dotmatrix_unlocked" in h["command"])
-               for h in group.get("hooks", []))
+    def ours(cmd: str) -> bool:
+        return ("127.0.0.1" in cmd and "/event" in cmd) or ("dotmatrix_unlocked" in cmd and cmd.rstrip().endswith("hook"))
+    return any(ours(h.get("command", "")) for h in group.get("hooks", []))
 
 
 def hooks_install(port: int, settings: Path = Path.home() / ".claude" / "settings.json") -> str:
@@ -305,4 +306,5 @@ if __name__ == "__main__":
         assert json.loads(s.read_text())["hooks"]["Stop"][0]["hooks"][0]["command"] == "rtk thing"
     assert config_dir().is_dir()
     assert _service_cmd(Path("/x"))[1:4] == ["-m", "dotmatrix_unlocked", "run"]
+    assert _is_ours({"hooks": [{"command": 'C:\\py\\python.exe -m dotmatrix_unlocked --port 7766 hook'}]})
     print("ok", "idle", idle_seconds(), "np-missing", now_playing_source())
