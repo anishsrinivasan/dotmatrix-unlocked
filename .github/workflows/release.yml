@@ -3,13 +3,28 @@ on:
   push:
     tags: ["v*"]
 jobs:
-  pypi:
+  build:
     runs-on: ubuntu-latest
-    environment: pypi
     permissions:
-      id-token: write  # PyPI trusted publishing: no API token stored in the repo
+      contents: write  # attach the wheel + sdist to a GitHub Release
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv build
+      - uses: actions/upload-artifact@v4
+        with: { name: dist, path: dist/ }
+      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes
+        env: { GH_TOKEN: "${{ github.token }}" }
+  pypi:
+    # Turn on once PyPI has this repo as a trusted publisher: gh variable set PUBLISH_PYPI --body true
+    if: vars.PUBLISH_PYPI == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # trusted publishing: no API token stored in the repo
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist/ }
+      - uses: astral-sh/setup-uv@v6
       - run: uv publish

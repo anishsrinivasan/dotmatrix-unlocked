@@ -21,9 +21,12 @@ with a local web UI.
 Needs Python 3.12+ and Bluetooth.
 
 ```sh
-uv tool install dotmatrix-unlocked     # or: pipx install dotmatrix-unlocked
+uv tool install git+https://github.com/anishsrinivasan/dotmatrix-unlocked
+# or: pipx install git+https://github.com/anishsrinivasan/dotmatrix-unlocked
 dotmatrix                              # starts it and opens http://127.0.0.1:7766
 ```
+
+Don't have `uv`? See [docs.astral.sh/uv](https://docs.astral.sh/uv/getting-started/installation/), or use `pipx`.
 
 In the web UI, click **Find my panel**. Turn the panel on first and close its phone app: the panel accepts only
 one Bluetooth connection.
