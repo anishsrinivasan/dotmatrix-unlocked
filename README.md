@@ -21,8 +21,7 @@ with a local web UI.
 Needs Python 3.12+ and Bluetooth.
 
 ```sh
-uv tool install git+https://github.com/anishsrinivasan/dotmatrix-unlocked
-# or: pipx install git+https://github.com/anishsrinivasan/dotmatrix-unlocked
+uv tool install dotmatrix-unlocked     # or: pipx install dotmatrix-unlocked
 dotmatrix                              # starts it and opens http://127.0.0.1:7766
 ```
 
