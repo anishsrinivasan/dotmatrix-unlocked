@@ -1,0 +1,45 @@
+[project]
+name = "dotmatrix-unlocked"
+version = "0.1.0"
+description = "Drive an iDotMatrix-compatible 32x32 LED panel from your computer: dashboard, Claude Code activity, music, visualizer, games and a mischievous cat."
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.12"
+keywords = ["idotmatrix", "led", "pixel", "bluetooth", "claude-code", "dashboard"]
+classifiers = [
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Home Automation",
+]
+dependencies = [
+    "bleak>=0.22",
+    "idotmatrix>=0.0.9",
+    "pillow>=10",
+    "winrt-Windows.Media.Control>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Foundation>=2.0; sys_platform == 'win32'",
+]
+
+[project.urls]
+Homepage = "https://github.com/anishsrinivasan/dotmatrix-unlocked"
+Issues = "https://github.com/anishsrinivasan/dotmatrix-unlocked/issues"
+
+[project.optional-dependencies]
+video = ["yt-dlp"]
+
+[project.scripts]
+dotmatrix = "dotmatrix_unlocked.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dotmatrix_unlocked"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

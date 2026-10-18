@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dotmatrix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&family=IBM+Plex+Mono:wght@400;500&family=Onest:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* smoked acrylic + two LED colours that each mean one thing */
+    --night: #120f17; --smoke: #1b1722; --smoke-2: #241e2c; --edge: #322a3c; --edge-2: #463b52;
+    --text: #eee9f3; --muted: #9c93aa; --faint: #6c6479;
+    --amber: #ffb24a; --amber-deep: #3a2814;   /* selected / will be sent */
+    --mint: #5be3a1;                           /* live / running / connected */
+    --coral: #ff6b5e;                          /* errors, delete */
+    --accent: var(--amber); --ok: var(--mint); --bad: var(--coral); --ask: var(--amber);
+    --radius: 16px;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+    --sans: "Onest", ui-sans-serif, -apple-system, system-ui, sans-serif;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--text); font: 14px/1.5 var(--sans); background-color: var(--night);
+         background-image: radial-gradient(circle at 18% -10%, #ffb24a14, transparent 45%),
+                           radial-gradient(#ffffff09 1px, transparent 1.5px);
+         background-size: auto, 14px 14px; background-attachment: fixed; }
+  main { max-width: 1120px; margin: 0 auto; padding: 28px 20px 120px; }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; border-radius: 6px; }
+
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+  h1 { font: 400 26px/1 "DotGothic16", var(--mono); letter-spacing: .04em; margin: 0 8px 0 0; color: var(--text);
+       text-shadow: 0 0 14px #ffb24a40; }
+  h2 { font: 500 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .14em; color: var(--muted); margin: 0 0 14px; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 99px;
+          background: var(--smoke); border: 1px solid var(--edge); font: 12px/1 var(--mono); color: var(--muted); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--coral); box-shadow: 0 0 6px var(--coral); }
+  .dot.on { background: var(--mint); box-shadow: 0 0 8px var(--mint); }
+
+  .grid { display: grid; grid-template-columns: 360px 1fr; gap: 20px; align-items: start; }
+  .grid > * { min-width: 0; }  /* long now-playing text ellipsizes instead of widening the column */
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } .sticky { position: static; } }
+  .card { background: linear-gradient(180deg, #1e1926, var(--smoke)); border: 1px solid var(--edge); border-radius: var(--radius);
+          padding: 18px; margin-bottom: 16px; box-shadow: inset 0 1px 0 #ffffff08; }
+  .sticky { position: sticky; top: 20px; }
+
+  /* ---- the device: smoked bezel, round LEDs, light blooming into the gaps */
+  .device { padding: 14px; border-radius: 22px; background: linear-gradient(155deg, #2a2232, #0c0a10 70%);
+            box-shadow: inset 0 1px 0 #ffffff12, inset 0 -3px 8px #000a, 0 24px 48px -24px #000; }
+  .led { position: relative; width: 100%; aspect-ratio: 1; background: #060508; border-radius: 6px; overflow: hidden; }
+  .led img { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; z-index: 1; }
+  .led::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+    background: radial-gradient(circle, transparent 54%, #060508 70%) 0 0 / calc(100% / 32) calc(100% / 32); }
+  .led .bloom { z-index: 3; filter: blur(7px) saturate(1.7); opacity: .42; mix-blend-mode: screen; image-rendering: auto; }
+  .led.big::before { content: ""; position: absolute; inset: 0; z-index: 4; pointer-events: none;
+    background: linear-gradient(135deg, #ffffff12, transparent 38%); }
+  .led.big #draftPreview { animation: power .9s ease-out both; }
+  @keyframes power { 0% { filter: brightness(0); } 55% { filter: brightness(1.6) saturate(1.2); } 100% { filter: none; } }
+  .previewHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .badge { font: 11px/1 var(--mono); padding: 5px 9px; border-radius: 99px; background: var(--smoke-2); color: var(--muted);
+           border: 1px solid var(--edge); }
+  .badge.draft { background: var(--amber-deep); color: var(--amber); border-color: #6a4618; }
+  .live { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
+  .live .led { width: 56px; flex: none; border-radius: 6px; box-shadow: 0 0 0 4px #0c0a10, 0 0 0 5px var(--edge); }
+  .live b { font-weight: 600; }
+  .live small { color: var(--muted); font: 12px var(--mono); display: block; }
+  .meta { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--edge); display: grid;
+          grid-template-columns: minmax(0, 1fr); gap: 7px; font-size: 13px; }
+  .meta div { display: flex; justify-content: space-between; gap: 12px; }
+  .meta span:first-child { color: var(--muted); flex: none; white-space: nowrap; }
+  .meta span:last-child { min-width: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+                          font: 12.5px/1.5 var(--mono); }
+  .sessions { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin-top: 8px; }
+  .sess { display: flex; gap: 8px; align-items: center; font: 12px var(--mono); color: var(--muted);
+          min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sess i { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: 0 0 6px currentColor; }
+
+  /* ---- views: a three-way switch, the active one has its LED lit */
+  .views { display: flex; gap: 4px; margin-bottom: 18px; background: #0f0d13; border: 1px solid var(--edge);
+           border-radius: 14px; padding: 4px; box-shadow: inset 0 2px 6px #0008; }
+  .view { flex: 1; position: relative; background: none; border: 0; border-radius: 10px; color: var(--muted); cursor: pointer;
+          padding: 9px 12px 9px 28px; font: 600 14px/1.2 var(--sans); text-align: left; transition: background .15s, color .15s; }
+  .view::before { content: ""; position: absolute; left: 12px; top: 14px; width: 7px; height: 7px; border-radius: 50%;
+                  background: #3a3245; transition: .2s; }
+  .view small { display: block; font: 400 11px/1.3 var(--mono); margin-top: 3px; color: var(--faint); }
+  .view:hover { color: var(--text); }
+  .view.active { background: var(--smoke-2); color: var(--text); box-shadow: inset 0 1px 0 #ffffff0d, 0 1px 3px #0008; }
+  .view.active::before { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+  .livedot { display: inline-block; width: 7px; height: 7px; margin-left: 4px; border-radius: 50%; background: var(--mint);
+             box-shadow: 0 0 8px var(--mint); vertical-align: middle; animation: pulse 1.6s ease-in-out infinite; }
+  .livedot[hidden] { display: none; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  @media (max-width: 520px) { .view small { display: none; } }
+  .viewpane { display: none; }
+  .viewpane.active { display: block; }
+
+  /* ---- skins: pick by sight */
+  .skins { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+  .skin { display: grid; grid-template-columns: 52px 1fr; grid-template-rows: auto 1fr; column-gap: 12px; align-items: start;
+          background: var(--smoke-2); border: 1px solid var(--edge); border-radius: 13px; padding: 10px; cursor: pointer;
+          text-align: left; color: var(--text); font: inherit; transition: border-color .15s, background .15s, box-shadow .15s; }
+  .skin:hover { border-color: var(--edge-2); }
+  .skin.active { border-color: var(--amber); background: linear-gradient(180deg, #2e2218, var(--amber-deep));
+                 box-shadow: 0 0 0 3px #ffb24a1f; }
+  .skin .thumb { grid-row: 1 / 3; position: relative; width: 52px; aspect-ratio: 1; border-radius: 6px; overflow: hidden;
+                 background: #060508; box-shadow: 0 0 0 3px #0c0a10; }
+  .skin .thumb img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+  .skin .thumb::after { content: ""; position: absolute; inset: 0;
+    background: radial-gradient(circle, transparent 50%, #060508 72%) 0 0 / calc(100% / 32) calc(100% / 32); }
+  .skin b { font-weight: 600; margin: 1px 0 2px; }
+  .skin small { color: var(--muted); font-size: 12px; line-height: 1.35; }
+
+  /* ---- form controls */
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 0; border-top: 1px solid var(--edge); }
+  .row:first-of-type { border-top: 0; }
+  .row label { font-weight: 500; }
+  .row small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; margin-top: 1px; }
+  .val { color: var(--amber); font: 12px var(--mono); min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 170px; accent-color: var(--amber); }
+  input[type=text], input[type=url], input[type=number], input[type=search], input[type=password], select {
+    background: #0f0d13; border: 1px solid var(--edge); color: var(--text); border-radius: 9px; padding: 8px 11px;
+    font: inherit; min-width: 0; transition: border-color .15s, box-shadow .15s; }
+  input:focus, select:focus { outline: none; border-color: var(--amber); box-shadow: 0 0 0 3px #ffb24a26; }
+  input::placeholder { color: var(--faint); }
+  select { padding: 7px 9px; cursor: pointer; }
+  input[type=color] { width: 38px; height: 30px; border: 1px solid var(--edge); border-radius: 8px; background: #0f0d13; padding: 3px; cursor: pointer; }
+  .btn { background: var(--amber); color: #1c1206; border: 1px solid #ffc779; border-radius: 9px; padding: 9px 15px;
+         font: 600 13px/1 var(--sans); cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+         box-shadow: 0 0 16px -4px #ffb24a80; transition: filter .15s, transform .05s; }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:active { transform: translateY(1px); }
+  .btn.ghost { background: var(--smoke-2); color: var(--text); border-color: var(--edge); box-shadow: none; }
+  .btn.ghost:hover { border-color: var(--edge-2); filter: none; }
+  .btn:disabled { opacity: .5; cursor: progress; }
+  .inline { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .inline > input[type=text], .inline > input[type=url], .inline > input[type=search], .inline > input[type=password] { flex: 1; }
+  a { color: var(--amber); }
+
+  .switch { position: relative; width: 42px; height: 24px; flex: none; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .switch span { position: absolute; inset: 0; background: #0f0d13; border: 1px solid var(--edge); border-radius: 99px;
+                 transition: .18s; cursor: pointer; }
+  .switch span::before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; border-radius: 50%;
+                         background: #5b5168; transition: .18s; }
+  .switch input:checked + span { background: var(--amber-deep); border-color: #7a5220; }
+  .switch input:checked + span::before { transform: translateX(18px); background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+  .mod .switch input:checked + span::before { box-shadow: none; }  /* a list of lit switches is noise; keep the glow for one-offs */
+  .sess i { box-shadow: none; }
+  .switch input:focus-visible + span { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  /* ---- sub-tabs, tiles, chips */
+  .tabs { display: flex; gap: 2px; margin-bottom: 14px; border-bottom: 1px solid var(--edge); flex-wrap: wrap; }
+  .tab { background: none; border: 0; color: var(--muted); font: 500 13px/1 var(--sans); padding: 10px 12px; cursor: pointer;
+         border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text); border-color: var(--amber); }
+  .pane { display: none; }
+  .pane.active { display: block; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-top: 12px; }
+  .tile { position: relative; border-radius: 10px; overflow: hidden; border: 2px solid var(--edge); cursor: pointer;
+          background: #060508; aspect-ratio: 1; padding: 0; transition: border-color .15s, box-shadow .15s; }
+  .tile:hover { border-color: var(--edge-2); }
+  .tile.active { border-color: var(--amber); box-shadow: 0 0 14px -2px #ffb24a80; }
+  .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tile img.px { image-rendering: pixelated; }
+  .tile span { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 7px; font: 11px var(--mono); color: #fff;
+               background: linear-gradient(transparent, #000d); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tile .del { position: absolute; top: 4px; right: 4px; border: 0; border-radius: 6px; background: #000b; color: #fff;
+               width: 22px; height: 22px; cursor: pointer; opacity: 0; transition: opacity .15s; }
+  .tile:hover .del, .tile .del:focus-visible { opacity: 1; }
+  .tile .del:hover { background: var(--coral); }
+  .tile.busy { opacity: .4; }
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; }
+  .chip { display: inline-flex; align-items: center; gap: 2px; background: var(--smoke-2); border: 1px solid var(--edge);
+          border-radius: 99px; padding: 2px 4px 2px 12px; font-size: 13px; transition: border-color .15s, background .15s; }
+  .chip:hover { border-color: var(--edge-2); }
+  .chip button { background: none; border: 0; color: var(--text); cursor: pointer; font: inherit; padding: 4px 2px; }
+  .chip button.x { color: var(--faint); padding: 4px 8px; }
+  .chip button.x:hover { color: var(--coral); }
+  .chip.pick { padding: 7px 13px; cursor: pointer; color: var(--text); font: 500 13px/1 var(--sans); }
+  .chip.active { border-color: var(--amber); background: var(--amber-deep); color: var(--amber); }
+  .chip.active::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--amber);
+                         box-shadow: 0 0 6px var(--amber); margin-right: 7px; }
+  .chip.active button:not(.x) { color: var(--amber); }
+
+  /* ---- dashboard modules */
+  .sub { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+  .sub span { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: 6px; }
+  .mod { display: flex; align-items: center; gap: 8px; padding: 7px 8px; margin: 0 -8px; border-radius: 10px;
+         border-top: 1px solid var(--edge); }
+  .mod:first-child { border-top: 0; }
+  .mod:hover { background: #ffffff05; }
+  .mod b { flex: 1; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mod.off b { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--edge-2); }
+  .mod .arrows { display: flex; flex-direction: column; }
+  .mod .arrows button { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 9px; line-height: 1; padding: 2px 4px; }
+  .mod .arrows button:hover:not(:disabled) { color: var(--amber); }
+  .mod .arrows button:disabled { opacity: .2; cursor: default; }
+  .mod select:disabled, .mod input[type=color]:disabled { visibility: hidden; }
+  .mod .rm { background: none; border: 0; color: var(--faint); cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 6px; }
+  .mod .rm:hover { color: var(--coral); }
+
+  /* ---- games: keycaps */
+  .game { display: grid; grid-template-columns: 168px 1fr; gap: 18px; align-items: start; }
+  .game .led { border-radius: 8px; box-shadow: 0 0 0 6px #0c0a10, 0 0 0 7px var(--edge); }
+  @media (max-width: 480px) { .game { grid-template-columns: 1fr; } }
+  .pad { display: grid; grid-template-columns: repeat(3, 40px) 56px; grid-template-rows: repeat(2, 40px); gap: 5px; margin-top: 12px; }
+  .pad button { background: linear-gradient(180deg, #2c2535, var(--smoke-2)); border: 1px solid var(--edge); border-radius: 9px;
+                color: var(--text); cursor: pointer; font-size: 13px; box-shadow: 0 3px 0 #0c0a10; transition: transform .05s, box-shadow .05s; }
+  .pad button:active { transform: translateY(2px); box-shadow: 0 1px 0 #0c0a10; color: var(--amber); }
+  .pad [data-dir=up] { grid-column: 2; } .pad [data-dir=left] { grid-column: 1; grid-row: 2; }
+  .pad [data-dir=down] { grid-column: 2; grid-row: 2; } .pad [data-dir=right] { grid-column: 3; grid-row: 2; }
+  .pad [data-dir=action] { grid-column: 4; grid-row: 1 / 3; border-radius: 50%; height: 56px; align-self: center; margin-left: 10px;
+                           font: 600 11px/1 var(--mono); text-transform: uppercase; letter-spacing: .06em;
+                           background: linear-gradient(180deg, #5a3a18, var(--amber-deep)); border-color: #7a5220; color: var(--amber); }
+
+  /* ---- microphone */
+  .row.mic { margin-top: 12px; border-top: 1px solid var(--edge); padding-top: 12px; }
+  .meter { height: 4px; background: #0f0d13; border-radius: 99px; overflow: hidden; margin: 6px 0 0; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--mint); box-shadow: 0 0 8px var(--mint); transition: width .05s; }
+  .setup { border-color: #6a4618; box-shadow: 0 0 0 3px #ffb24a14, inset 0 1px 0 #ffffff08; }
+  .setup[hidden] { display: none; }
+  code { font: 12px var(--mono); background: #0f0d13; border: 1px solid var(--edge); border-radius: 5px; padding: 1px 5px; }
+  .empty { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+
+  /* ---- apply bar + toast */
+  .applybar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; padding: 14px 20px;
+              background: #17131dee; border-top: 1px solid #6a4618; backdrop-filter: blur(10px);
+              box-shadow: 0 -12px 30px -12px #ffb24a30; transform: translateY(110%); transition: transform .22s ease-out; }
+  .applybar.show { transform: none; }
+  .applybar .inner { width: 100%; max-width: 1120px; display: flex; gap: 10px; align-items: center; }
+  .applybar .what { flex: 1; color: var(--muted); font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .applybar .what b { color: var(--amber); font-weight: 500; }
+  #toast { position: fixed; top: 18px; left: 50%; transform: translate(-50%, -8px); background: var(--smoke-2); color: var(--text);
+           border: 1px solid var(--edge-2); padding: 10px 16px; border-radius: 10px; font-size: 13px; opacity: 0;
+           transition: opacity .2s, transform .2s; pointer-events: none; z-index: 10; box-shadow: 0 10px 30px #0009; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.err { border-color: var(--coral); color: #ffd6d2; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>dotmatrix</h1>
+    <span class="pill"><span class="dot" id="conn"></span><span id="connText">connecting…</span></span>
+    <span class="pill" id="showing">—</span>
+  </header>
+
+  <div class="grid">
+    <div class="sticky">
+      <section class="card">
+        <div class="previewHead">
+          <h2 style="margin:0">Preview</h2>
+          <span class="badge" id="previewBadge">matches display</span>
+        </div>
+        <div class="device"><div class="led big"><img id="draftPreview" alt="Preview of current settings"><img class="bloom" alt="" aria-hidden="true"></div></div>
+        <div class="live">
+          <div class="led"><img id="livePreview" alt="" onerror="this.style.visibility='hidden'" onload="this.style.visibility=''"></div>
+          <div><b>On display now</b><small id="liveWhat">—</small></div>
+        </div>
+        <div class="meta">
+          <div><span>Weather</span><span id="mWeather">—</span></div>
+          <div><span>Now playing</span><span id="mMusic" title="">—</span></div>
+          <div><span>Last ack</span><span id="mAck">—</span></div>
+          <div><span>Claude sessions</span><span id="mSessCount">0</span></div>
+        </div>
+        <div class="sessions" id="sessions"></div>
+      </section>
+    </div>
+
+    <div>
+      <section class="card setup" id="setupCard" hidden>
+        <h2>Set up your panel</h2>
+        <p style="margin:0 0 12px">Turn the panel on and close its phone app (it only allows one connection), then:</p>
+        <div class="inline"><button class="btn" id="scanBtn">Find my panel</button>
+          <span class="empty" style="margin:0" id="scanStatus"></span></div>
+        <div class="chips" id="scanList" style="margin-top:12px"></div>
+        <p class="empty">No panel yet? Try everything with <code>dotmatrix run --fake</code>; the preview acts as the display.</p>
+      </section>
+
+      <nav class="views" role="tablist">
+        <button class="view active" data-view="viewDisplay">Display<small>pick, preview, Apply</small></button>
+        <button class="view" data-view="viewLive">Live <i class="livedot" id="liveDot" hidden></i><small>plays right now</small></button>
+        <button class="view" data-view="viewSettings">Settings<small>panel &amp; behaviour</small></button>
+      </nav>
+
+      <div class="viewpane active" id="viewDisplay">
+      <section class="card">
+        <h2>Skin</h2>
+        <div class="skins">
+          <button class="skin" data-skin="dashboard"><b>Dashboard</b><small>Clock, weather, Claude, now playing</small></button>
+          <button class="skin" data-skin="album"><b>Album art</b><small>Cover of what's playing</small></button>
+          <button class="skin" data-skin="vinyl"><b>Vinyl</b><small>Spinning record, cover on the label</small></button>
+          <button class="skin" data-skin="gif"><b>GIF</b><small>Loop one from your library</small></button>
+          <button class="skin" data-skin="visualizer"><b>Visualizer</b><small>Winamp-style bars to your music</small></button>
+          <button class="skin" data-skin="cat"><b>Cat</b><small>A mischievous pixel cat</small></button>
+        </div>
+      </section>
+
+      <section class="card" id="dashCard">
+        <h2>Dashboard</h2>
+        <p class="sub">Ready-made <span>load one, tweak it, Apply</span></p>
+        <div class="chips" id="layouts" style="margin-bottom:14px"></div>
+        <div id="savedBox" hidden>
+          <p class="sub">My dashboards</p>
+          <div class="chips" id="saved" style="margin-bottom:14px"></div>
+        </div>
+        <p class="sub">Modules <span>top to bottom · Now playing fills the rest, small fonts fit more lines</span></p>
+        <div id="modules"></div>
+        <div class="inline" style="margin:10px 0 14px">
+          <select id="addMod" aria-label="Add module"></select>
+          <span style="flex:1"></span>
+          <input type="text" id="saveName" placeholder="Name this layout" maxlength="24" style="max-width:200px">
+          <button class="btn ghost" id="saveSkin">Save layout</button>
+        </div>
+        <div class="row"><label for="c24">24-hour clock</label><label class="switch"><input type="checkbox" id="c24" data-key="clock_24h"><span></span></label></div>
+        <div class="row"><div><label for="fps">Animation speed</label><small>Frames/sec while Claude works. Higher = more Bluetooth traffic.</small></div>
+          <div class="inline"><input type="range" id="fps" data-key="anim_fps" min="0.2" max="2" step="0.1"><span class="val" id="fpsVal"></span></div></div>
+        <div class="row"><div><label for="page">Text page time</label><small>Seconds per page for long song titles</small></div>
+          <div class="inline"><input type="range" id="page" data-key="page_secs" min="1" max="10" step="0.5"><span class="val" id="pageVal"></span></div></div>
+      </section>
+
+      <section class="card" id="infoCard">
+        <p class="empty" style="margin:0" id="infoText"></p>
+      </section>
+
+      <section class="card" id="gifCard">
+        <h2>GIF</h2>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-pane="paneBuiltin">Built-in</button>
+          <button class="tab" data-pane="paneGiphy">GIPHY</button>
+          <button class="tab" data-pane="paneLibrary">My library</button>
+          <button class="tab" data-pane="paneAdd">Link / upload</button>
+        </div>
+        <div class="pane active" id="paneBuiltin">
+          <p class="empty" style="margin:0">Made for 32×32, so they stay crisp. Click to preview; Apply sends it.</p>
+          <div class="tiles" id="presets"></div>
+        </div>
+        <div class="pane" id="paneGiphy">
+          <div id="giphyKeyBox">
+            <p class="empty" style="margin:0 0 8px">GIPHY search needs a free API key: create an app at
+              <a href="https://developers.giphy.com/dashboard/" target="_blank" rel="noopener">developers.giphy.com</a> and paste its key.</p>
+            <div class="inline"><input type="password" id="giphyKey" placeholder="GIPHY API key" autocomplete="off">
+              <button class="btn" id="giphyKeySave">Save key</button></div>
+          </div>
+          <div id="giphySearchBox" hidden>
+            <div class="inline"><input type="search" id="giphyQ" placeholder="Search GIPHY (empty = trending)">
+              <button class="btn" id="giphyGo">Search</button>
+              <button class="btn ghost" id="giphyKeyReset" title="Change API key">Key…</button></div>
+            <p class="empty">Pixel art and simple shapes look best at 32×32 — try "pixel", "8 bit", "loading".</p>
+          </div>
+          <div class="tiles" id="giphyResults"></div>
+        </div>
+        <div class="pane" id="paneLibrary"><div class="tiles" id="library"></div></div>
+        <div class="pane" id="paneAdd">
+          <div class="inline">
+            <input type="url" id="gifUrl" placeholder="Direct .gif link">
+            <button class="btn" id="gifAdd">Add</button>
+            <label class="btn ghost">Upload…<input type="file" id="gifFile" accept="image/gif,image/*" multiple hidden></label>
+          </div>
+          <p class="empty">GIFs are center-cropped to 32×32 and capped at 48 frames / 40KB.</p>
+        </div>
+      </section>
+
+      <section class="card" id="visCard">
+        <h2>Visualizer</h2>
+        <div class="chips" id="visList"></div>
+        <p class="empty">Without the microphone it moves to a made-up beat while music plays and settles when paused.</p>
+        <div class="row mic"><div><label>Listen with this browser's microphone</label>
+          <small>Sound stays in the browser; only levels reach the display. Works while this tab is open.</small></div>
+          <label class="switch"><input type="checkbox" class="micToggle"><span></span></label></div>
+        <div class="meter"><i class="micMeter"></i></div>
+      </section>
+
+      <section class="card" id="catCard">
+        <h2>Cat</h2>
+        <p style="margin:0 0 10px" id="catMood">—</p>
+        <p class="sub">Tricks <span>play right away, even over other skins</span></p>
+        <div class="chips" id="tricks"></div>
+        <p class="empty">Reacts to your Mac: waves when Claude needs you, types along while Claude works, dances to music,
+          naps when you're away 5 min (1 min after 11pm) and greets you when you're back. Otherwise: random mischief.
+          With the microphone on, claps startle it.</p>
+        <div class="row mic"><div><label>Listen with this browser's microphone</label>
+          <small>Sound stays in the browser; only levels reach the display. Works while this tab is open.</small></div>
+          <label class="switch"><input type="checkbox" class="micToggle"><span></span></label></div>
+        <div class="meter"><i class="micMeter"></i></div>
+      </section>
+      </div>
+
+      <div class="viewpane" id="viewLive">
+      <p class="empty" style="margin:0 0 12px">Everything here takes over the panel immediately, no Apply. Stop it and your skin comes back.</p>
+      <section class="card">
+        <h2>Games</h2>
+        <div class="chips" id="gameList" style="margin-bottom:12px"></div>
+        <div class="game">
+          <div class="led"><img id="gameView" alt="Live view of the display"></div>
+          <div>
+            <p style="margin:0 0 4px"><b id="gameTitle"></b> · <span id="gameScore">not playing</span></p>
+            <p class="empty" style="margin:0 0 4px" id="gameHelp"></p>
+            <p class="empty" style="margin:0 0 10px">Arrows or WASD.</p>
+            <div class="inline"><button class="btn" id="gameStart">Play</button><button class="btn ghost" id="gameStop">Stop</button></div>
+            <div class="pad" id="pad">
+              <button data-dir="up" aria-label="Up">▲</button><button data-dir="left" aria-label="Left">◀</button>
+              <button data-dir="down" aria-label="Down">▼</button><button data-dir="right" aria-label="Right">▶</button>
+              <button data-dir="action" id="actionBtn"></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Video</h2>
+        <div class="inline">
+          <input type="url" id="videoUrl" placeholder="YouTube (or any video) link">
+          <button class="btn" id="videoPlay">Play</button>
+          <label class="btn ghost">Upload…<input type="file" id="videoFile" accept="video/*,image/gif" hidden></label>
+          <button class="btn ghost" id="videoStop">Stop</button>
+        </div>
+        <div class="row" style="margin-top:8px"><div><label for="videoFill">Fill the square</label><small>Off = whole frame with black bars</small></div>
+          <label class="switch"><input type="checkbox" id="videoFill" checked><span></span></label></div>
+        <p class="empty" id="videoStatus">Nothing playing.</p>
+        <p class="empty">Silent, loops, max 10 min. Uploads up to ~8MB. Experimental.</p>
+      </section>
+
+      <section class="card">
+        <h2>Countdown timer</h2>
+        <div class="chips" style="margin-bottom:8px">
+          <button class="chip pick" data-min="1">1 min</button><button class="chip pick" data-min="5">5 min</button>
+          <button class="chip pick" data-min="10">10 min</button><button class="chip pick" data-min="25">25 min</button>
+          <button class="chip pick" data-min="60">1 hr</button>
+        </div>
+        <div class="inline">
+          <input type="number" id="timerMin" value="5" min="0.1" max="1440" step="any" style="width:80px" aria-label="Minutes">
+          <input type="text" id="timerLabel" placeholder="Label (6 chars)" maxlength="20">
+        </div>
+        <div class="inline" style="margin-top:8px">
+          <button class="btn" id="timerStart">Start</button>
+          <button class="btn ghost" id="timerAdd">+1 min</button>
+          <button class="btn ghost" id="timerStop">Stop</button>
+        </div>
+        <p class="empty" id="timerStatus">Shows over any skin, flashes TIME UP at zero.</p>
+      </section>
+
+      <section class="card">
+        <h2>Message</h2>
+        <div class="inline">
+          <input type="text" id="msgText" placeholder="Text (8 chars per line)" maxlength="200">
+          <input type="color" id="msgColor" value="#ffffff" aria-label="Text color">
+        </div>
+        <div class="inline" style="margin-top:8px">
+          <input type="number" id="msgTtl" value="15" min="1" max="3600" style="width:80px" aria-label="Seconds on screen">
+          <button class="btn" id="msgSend">Show</button>
+          <label class="btn ghost">Image…<input type="file" id="msgImage" accept="image/*" hidden></label>
+          <button class="btn ghost" id="msgClear">Clear</button>
+        </div>
+      </section>
+      </div>
+
+      <div class="viewpane" id="viewSettings">
+      <section class="card">
+        <h2>Panel</h2>
+        <div class="row"><label for="bright">Brightness</label>
+          <div class="inline"><input type="range" id="bright" data-key="brightness" min="5" max="100" step="5"><span class="val" id="brightVal"></span></div></div>
+        <div class="row"><div><label for="gamma">Gamma</label><small>Raise if dim colors look washed out on the LEDs</small></div>
+          <div class="inline"><input type="range" id="gamma" data-key="gamma" min="1" max="3.5" step="0.1"><span class="val" id="gammaVal"></span></div></div>
+        <div class="row"><label for="city">Weather city</label><input type="text" id="city" style="width:180px" placeholder="Your city"></div>
+      </section>
+
+      <section class="card">
+        <h2>Claude Code</h2>
+        <div class="row"><div><label for="interrupt">Switch to the dashboard when Claude needs input</label><small>Interrupts album, vinyl, GIF, visualizer and cat</small></div>
+          <label class="switch"><input type="checkbox" id="interrupt" data-key="interrupt_on_input"><span></span></label></div>
+      </section>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="applybar" id="applybar"><div class="inner">
+  <div class="what" id="applyWhat"></div>
+  <button class="btn ghost" id="discard">Discard</button>
+  <button class="btn" id="apply">Apply to display</button>
+</div></div>
+<div id="toast" role="status"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const clone = (o) => JSON.parse(JSON.stringify(o));
+let playing = false, GAMES = [];
+let applied = null, draft = null, library = [], lastCrc = null, draftUrl = null;
+
+const INFO = { album: "Album art has no settings. Shows the cover of what's playing, or the last cover seen.",
+  vinyl: "Vinyl has no settings. The record spins with the album cover on its label; a default label when nothing plays." };
+let gamePick = "snake";  // live choice, not part of the draft
+const LABELS = { skin: "skin", gif: "GIF", vis_style: "visualizer style", layout: "modules", clock_24h: "clock format", anim_fps: "animation speed", page_secs: "page time", interrupt_on_input: "input override", brightness: "brightness",
+  gamma: "gamma", city: "city" };
+const DRAFT_KEYS = Object.keys(LABELS);
+
+function toast(msg, err = false) {
+  const t = $("toast"); t.textContent = msg; t.className = "show" + (err ? " err" : "");
+  clearTimeout(toast.h); toast.h = setTimeout(() => (t.className = ""), 2400);
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} :
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = res.status === 204 ? null : await res.json();
+  if (!res.ok) throw new Error(data?.error || res.statusText);
+  return data;
+}
+
+const hex = (rgb) => "#" + rgb.map((v) => v.toString(16).padStart(2, "0")).join("");
+const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const fileB64 = (f) => new Promise((ok, bad) => {
+  const r = new FileReader(); r.onload = () => ok(r.result.split(",")[1]); r.onerror = bad; r.readAsDataURL(f);
+});
+
+function changes() {
+  return DRAFT_KEYS.filter((k) => JSON.stringify(draft[k]) !== JSON.stringify(applied[k]));
+}
+
+function edit(patch) {
+  Object.assign(draft, patch);
+  render(); schedulePreview();
+}
+
+// ---- draft preview: rendered server-side, never sent to the display
+let previewTimer;
+function schedulePreview() { clearTimeout(previewTimer); previewTimer = setTimeout(renderPreview, 150); }
+async function renderPreview() {
+  const body = Object.fromEntries(DRAFT_KEYS.filter((k) => k !== "city").map((k) => [k, draft[k]]));
+  try {
+    const res = await fetch("/render", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error((await res.json()).error);
+    const url = URL.createObjectURL(await res.blob());
+    $("draftPreview").src = url;
+    if (draftUrl) URL.revokeObjectURL(draftUrl);
+    draftUrl = url;
+  } catch (e) { toast(e.message, true); }
+}
+
+function render() {
+  document.querySelectorAll(".skin").forEach((b) => b.classList.toggle("active", b.dataset.skin === draft.skin));
+  $("gifCard").hidden = draft.skin !== "gif";
+  $("visCard").hidden = draft.skin !== "visualizer";
+  $("catCard").hidden = draft.skin !== "cat";
+  $("dashCard").hidden = draft.skin !== "dashboard";
+  $("infoCard").hidden = !INFO[draft.skin];
+  $("infoText").textContent = INFO[draft.skin] || "";
+  document.querySelectorAll("#visList .chip").forEach((c) => c.classList.toggle("active", c.dataset.id === draft.vis_style));
+  renderGamePick(); renderModules(); renderSaved();
+  document.querySelectorAll("[data-key]").forEach((i) => {
+    if (i.type === "checkbox") i.checked = draft[i.dataset.key]; else i.value = draft[i.dataset.key];
+  });
+  if (document.activeElement !== $("city")) $("city").value = draft.city;
+  $("fpsVal").textContent = (+draft.anim_fps).toFixed(1); $("pageVal").textContent = draft.page_secs + "s";
+  $("brightVal").textContent = draft.brightness + "%"; $("gammaVal").textContent = (+draft.gamma).toFixed(1);
+  document.querySelectorAll("#library .tile, #presets .tile").forEach((t) =>
+    t.classList.toggle("active", draft.skin === "gif" && t.dataset.name === draft.gif));
+  const ch = changes();
+  $("applybar").classList.toggle("show", ch.length > 0);
+  $("applyWhat").innerHTML = ch.length ? `<b>${ch.length} unapplied</b> · ${ch.map((k) => LABELS[k]).join(", ")}` : "";
+  $("previewBadge").textContent = ch.length ? "preview · not applied" : "matches display";
+  $("previewBadge").classList.toggle("draft", ch.length > 0);
+  $("giphyKeyBox").hidden = !!applied.giphy_key; $("giphySearchBox").hidden = !applied.giphy_key;
+}
+
+function renderGamePick() {
+  document.querySelectorAll("#gameList .chip").forEach((c) => c.classList.toggle("active", c.dataset.id === gamePick));
+  const g = GAMES.find((x) => x.id === gamePick);
+  if (g) {
+    $("gameTitle").textContent = g.title;
+    $("gameHelp").textContent = g.help + (g.action ? ` Space / round button = ${g.action.toLowerCase()}.` : "");
+    $("actionBtn").textContent = g.action; $("actionBtn").hidden = !g.action;
+    $("actionBtn").setAttribute("aria-label", g.action || "Action");
+  }
+}
+
+// ---- status of the real display
+const COLORS = { working: "#d97757", input: "#ffc800", waiting: "#464b5f" };
+async function poll() {
+  try {
+    const s = await api("/status");
+    $("conn").classList.toggle("on", s.connected);
+    $("connText").textContent = !s.paired ? "no panel paired" : s.connected ? (s.fake ? "fake panel" : "connected") : "reconnecting…";
+    $("showing").textContent = "showing: " + s.showing;
+    $("liveWhat").textContent = s.showing + (s.connected ? "" : " (disconnected)");
+    $("mWeather").textContent = s.weather ? `${Math.round(s.weather.temp)}° · ${s.city}` : `— · ${s.city}`;
+    $("mMusic").textContent = $("mMusic").title = s.music ? `${s.music.title} — ${s.music.artist}` : "nothing playing";
+    $("mAck").textContent = s.secs_since_ack + "s ago";
+    const sess = Object.values(s.sessions);
+    $("mSessCount").textContent = sess.length;
+    $("sessions").replaceChildren(...sess.map((v) => {
+      const d = document.createElement("div"); d.className = "sess";
+      const i = document.createElement("i"); i.style.background = COLORS[v.state];
+      d.append(i, `${v.state} · ${v.cwd.split("/").pop() || v.cwd}`);
+      return d;
+    }));
+    const mmss = (n) => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+    $("videoStatus").textContent = s.video ? `▶ ${s.video.title} · ${mmss(s.video.pos)} / ${mmss(s.video.len)}${s.video.decoding ? " (loading…)" : ""}`
+      : s.video_error ? "Couldn't play: " + s.video_error : "Nothing playing.";
+    $("timerStatus").textContent = s.timer ? (s.timer.remaining ? `⏱ ${mmss(s.timer.remaining)} left${s.timer.label ? " · " + s.timer.label : ""}` : "⏰ Time's up!")
+      : "Shows over any skin, flashes TIME UP at zero.";
+    const MOOD = { ask: "waving — Claude needs your input", sleep: `napping — you've been idle ${mmss(s.idle)}`,
+      greet: "happy you're back", work: "typing along with Claude", dance: "dancing to " + (s.music?.title || "music") };
+    $("catMood").textContent = "The cat is " + (MOOD[s.cat_mood] || "up to random mischief") + ".";
+    $("setupCard").hidden = s.paired;
+    playing = !!s.game;
+    $("gameScore").textContent = s.game ? (s.game.title === $("gameTitle").textContent ? "" : s.game.title + " ") + `${s.game.over ? "game over" : "score"} · ${s.game.score}` : "not playing";
+    $("gameStart").textContent = s.game ? "Restart" : "Play";
+    $("gameView").style.visibility = playing ? "" : "hidden";
+    $("liveDot").hidden = !(s.game || s.video || s.timer);
+    if (s.preview_crc !== lastCrc) { lastCrc = s.preview_crc; $("livePreview").src = "/preview?" + s.preview_crc; }
+  } catch { $("conn").classList.remove("on"); $("connText").textContent = "daemon not running"; }
+}
+
+// ---- GIF sources
+function tile({ name, src, label, pixel, onclick, ondelete }) {
+  const b = document.createElement("div"); b.className = "tile"; b.dataset.name = name || ""; b.title = label || name || "";
+  b.tabIndex = 0; b.setAttribute("role", "button");
+  const img = document.createElement("img"); img.src = src; img.alt = label || name || ""; img.loading = "lazy";
+  if (pixel) img.className = "px";
+  b.append(img);
+  if (label) { const s = document.createElement("span"); s.textContent = label; b.append(s); }
+  if (ondelete) {
+    const x = document.createElement("button"); x.className = "del"; x.textContent = "×"; x.setAttribute("aria-label", "Delete " + name);
+    x.onclick = (e) => { e.stopPropagation(); ondelete(); }; b.append(x);
+  }
+  b.onclick = () => onclick(b);
+  b.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onclick(b); } };
+  return b;
+}
+
+// ---- dashboard modules: an ordered stack, edited in the draft like everything else
+let CATALOG = {};  // from GET /modules: id -> {label, font, color, single}
+function setMod(i, patch) { const layout = clone(draft.layout); Object.assign(layout[i], patch); edit({ layout }); }
+function removeMod(i) { const layout = clone(draft.layout); layout.splice(i, 1); edit({ layout }); }
+function moveMod(i, d) { const layout = clone(draft.layout); [layout[i], layout[i + d]] = [layout[i + d], layout[i]]; edit({ layout }); }
+function renderModules() {
+  const box = $("modules");
+  if (box.contains(document.activeElement) && document.activeElement.type === "color") return;  // don't kill an open picker
+  box.replaceChildren(...draft.layout.map((m, i) => {
+    const row = document.createElement("div"); row.className = "mod" + (m.on ? "" : " off");
+    row.innerHTML = `<span class="arrows"><button aria-label="Move up">▲</button><button aria-label="Move down">▼</button></span>
+      <b></b><select aria-label="Font"><option value="regular">Regular 3×5</option><option value="small">Small 3×4</option></select>
+      <input type="color" aria-label="Color"><label class="switch"><input type="checkbox" aria-label="Show"><span></span></label>
+      <button class="rm" aria-label="Remove module" title="Remove">×</button>`;
+    row.querySelector(".rm").onclick = () => removeMod(i);
+    const [up, down] = row.querySelectorAll(".arrows button");
+    up.disabled = i === 0; down.disabled = i === draft.layout.length - 1;
+    up.onclick = () => moveMod(i, -1); down.onclick = () => moveMod(i, 1);
+    const info = CATALOG[m.id] || { label: m.id, font: true };
+    row.querySelector("b").textContent = info.label;
+    const sel = row.querySelector("select"); sel.value = m.font; sel.disabled = !info.font;
+    sel.onchange = () => setMod(i, { font: sel.value });
+    const col = row.querySelector("input[type=color]"); col.value = hex(m.color); col.disabled = m.id === "spacer";
+    col.oninput = () => { draft.layout[i].color = rgb(col.value); schedulePreview(); };
+    col.onchange = () => setMod(i, { color: rgb(col.value) });
+    const sw = row.querySelector("input[type=checkbox]"); sw.checked = m.on; sw.onchange = () => setMod(i, { on: sw.checked });
+    return row;
+  }));
+  if (!draft.layout.length) box.innerHTML = '<p class="empty">No modules. Add one below.</p>';
+  const present = new Set(draft.layout.map((m) => m.id));
+  const add = $("addMod");
+  add.replaceChildren(new Option("+ Add module…", ""), ...Object.entries(CATALOG)
+    .filter(([id, c]) => !(c.single && present.has(id))).map(([id, c]) => new Option(c.label, id)));
+}
+$("addMod").onchange = (e) => {
+  const id = e.target.value; if (!id) return;
+  const c = CATALOG[id];
+  edit({ layout: [...clone(draft.layout), { id, on: true, font: "regular", color: c.color }] });
+};
+
+// ---- saved dashboards: stored right away (local file, no Bluetooth); loading one only changes the draft
+let LAYOUTS = {};
+function renderLayouts() {
+  $("layouts").replaceChildren(...Object.entries(LAYOUTS).map(([n, layout]) => {
+    const b = document.createElement("button");
+    b.className = "chip pick" + (draft.skin === "dashboard" && JSON.stringify(layout) === JSON.stringify(draft.layout) ? " active" : "");
+    b.textContent = n;
+    b.onclick = () => edit({ skin: "dashboard", layout: clone(layout) });
+    return b;
+  }));
+}
+function renderSaved() {
+  renderLayouts();
+  const names = Object.keys(applied.saved_skins || {});
+  $("savedBox").hidden = !names.length;
+  $("saved").replaceChildren(...names.map((n) => {
+    const c = document.createElement("span");
+    c.className = "chip" + (draft.skin === "dashboard" && JSON.stringify(applied.saved_skins[n]) === JSON.stringify(draft.layout) ? " active" : "");
+    const load = document.createElement("button"); load.textContent = n; load.title = "Load into preview";
+    load.onclick = () => edit({ skin: "dashboard", layout: clone(applied.saved_skins[n]) });
+    const x = document.createElement("button"); x.className = "x"; x.textContent = "×"; x.setAttribute("aria-label", "Delete " + n);
+    x.onclick = () => { const all = { ...applied.saved_skins }; delete all[n]; saveSkins(all); };
+    c.append(load, x); return c;
+  }));
+}
+async function saveSkins(all) {
+  try { const res = await api("/config", { saved_skins: all }); applied.saved_skins = draft.saved_skins = res.saved_skins; render(); }
+  catch (e) { toast(e.message, true); }
+}
+$("saveSkin").onclick = async () => {
+  const n = $("saveName").value.trim(); if (!n) return toast("Give it a name", true);
+  await saveSkins({ ...applied.saved_skins, [n]: draft.layout }); $("saveName").value = ""; toast(`Saved "${n}"`);
+};
+$("saveName").onkeydown = (e) => { if (e.key === "Enter") $("saveSkin").click(); };
+
+function pickGif(name) { edit({ gif: name, skin: "gif" }); }
+
+async function loadLibrary() {
+  library = await api("/gifs");
+  $("library").replaceChildren(...library.map((n) => tile({
+    name: n, src: "/gifs/" + n, label: n.replace(/\.gif$/, ""), pixel: true, onclick: () => pickGif(n),
+    ondelete: async () => {
+      await api("/gifs/delete", { name: n });
+      applied = await api("/config");
+      if (draft.gif === n) draft.gif = applied.gif;
+      loadLibrary();
+    },
+  })));
+  if (!library.length) $("library").innerHTML = '<p class="empty">Empty. Pick a built-in, search GIPHY, or upload.</p>';
+  render();
+}
+
+// add to the library (local disk only, no Bluetooth), then select it in the draft
+async function addAndPick(body, el) {
+  el?.classList.add("busy");
+  try { const { name } = await api("/gifs", body); await loadLibrary(); pickGif(name); }
+  catch (e) { toast(e.message, true); }
+  finally { el?.classList.remove("busy"); }
+}
+
+async function loadPresets() {
+  const names = await api("/presets");
+  $("presets").replaceChildren(...names.map((p) => tile({
+    name: p + ".gif", src: `/presets/${p}.gif`, label: p, pixel: true,
+    onclick: (el) => library.includes(p + ".gif") ? pickGif(p + ".gif") : addAndPick({ preset: p }, el),
+  })));
+  render();
+}
+
+async function giphySearch() {
+  const box = $("giphyResults"); box.innerHTML = '<p class="empty">Searching…</p>';
+  try {
+    const items = await api("/giphy?q=" + encodeURIComponent($("giphyQ").value));
+    box.replaceChildren(...items.map((g) => tile({
+      src: g.thumb, label: g.title, onclick: (el) => addAndPick({ url: g.url, name: g.title || g.id }, el),
+    })));
+    if (!items.length) box.innerHTML = '<p class="empty">No results.</p>';
+  } catch (e) { box.innerHTML = ""; toast(e.message, true); }
+}
+
+// ---- wiring
+document.querySelectorAll(".tab").forEach((t) => (t.onclick = () => {
+  document.querySelectorAll(".tab").forEach((x) => x.classList.toggle("active", x === t));
+  document.querySelectorAll(".pane").forEach((p) => p.classList.toggle("active", p.id === t.dataset.pane));
+  if (t.dataset.pane === "paneGiphy" && applied.giphy_key && !$("giphyResults").children.length) giphySearch();
+}));
+document.querySelectorAll(".skin").forEach((b) => (b.onclick = () => {
+  edit({ skin: b.dataset.skin });
+  if (b.dataset.skin === "gif" && !draft.gif) toast("Pick a GIF below");
+}));
+document.querySelectorAll("[data-key]").forEach((i) => {
+  const ev = i.type === "range" ? "input" : "change";
+  i.addEventListener(ev, () => edit({ [i.dataset.key]: i.type === "checkbox" ? i.checked : i.tagName === "SELECT" ? i.value : +i.value }));
+});
+$("city").oninput = (e) => { draft.city = e.target.value; render(); };
+
+$("discard").onclick = () => { draft = clone(applied); render(); renderPreview(); };
+$("apply").onclick = async () => {
+  const patch = Object.fromEntries(changes().map((k) => [k, draft[k]]));
+  $("apply").disabled = true; $("apply").textContent = "Sending…";
+  try {
+    applied = await api("/config", patch);
+    draft = clone(applied); render(); renderPreview();
+    toast("Applied — the display updates in a moment");
+  } catch (e) { toast(e.message, true); }
+  finally { $("apply").disabled = false; $("apply").textContent = "Apply to display"; }
+};
+
+$("giphyKeySave").onclick = async () => {
+  try {
+    const res = await api("/config", { giphy_key: $("giphyKey").value.trim() });
+    applied.giphy_key = res.giphy_key; draft.giphy_key = res.giphy_key; $("giphyKey").value = "";
+    render(); if (applied.giphy_key) giphySearch();
+  } catch (e) { toast(e.message, true); }
+};
+$("giphyKeyReset").onclick = () => { $("giphyKeyBox").hidden = false; };
+$("giphyGo").onclick = giphySearch;
+$("giphyQ").onkeydown = (e) => { if (e.key === "Enter") giphySearch(); };
+
+$("gifAdd").onclick = () => { const url = $("gifUrl").value.trim(); if (url) addAndPick({ url, name: url.split("/").pop() }).then(() => ($("gifUrl").value = "")); };
+$("gifFile").onchange = async (e) => {
+  for (const f of e.target.files) await addAndPick({ name: f.name, data: await fileB64(f) });
+  e.target.value = "";
+};
+
+$("msgSend").onclick = async () => {
+  try {
+    await api("/scene", { id: "ui", text: $("msgText").value, ttl: +$("msgTtl").value, color: rgb($("msgColor").value) });
+    toast("Sent to display");
+  } catch (e) { toast(e.message, true); }
+};
+$("msgText").onkeydown = (e) => { if (e.key === "Enter") $("msgSend").click(); };
+$("msgImage").onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try { await api("/scene", { id: "ui", image: await fileB64(f), ttl: +$("msgTtl").value }); toast("Image sent"); }
+  catch (err) { toast(err.message, true); }
+  e.target.value = "";
+};
+$("msgClear").onclick = () => api("/scene", { id: "ui", clear: true }).then(() => toast("Cleared"));
+
+// ---- games: live, straight to the panel (not part of the draft)
+const steer = (dir) => api("/game", { action: "key", dir }).catch(() => {});
+$("gameStart").onclick = (e) => e.currentTarget.blur() || api("/game", { action: "start", name: gamePick }).then(() => { playing = true; $("gameStart").textContent = "Restart"; });
+$("gameStop").onclick = () => api("/game", { action: "stop" }).then(() => { playing = false; $("gameStart").textContent = "Play"; });
+async function playVideo(body) {
+  $("videoStatus").textContent = "Loading…"; $("videoPlay").disabled = true;
+  try { const r = await api("/video", { ...body, fill: $("videoFill").checked }); toast("Playing " + r.title); }
+  catch (e) { $("videoStatus").textContent = "Couldn't play: " + e.message; toast(e.message, true); }
+  finally { $("videoPlay").disabled = false; }
+}
+$("videoPlay").onclick = () => { const url = $("videoUrl").value.trim(); if (url) playVideo({ url }); };
+$("videoUrl").onkeydown = (e) => { if (e.key === "Enter") $("videoPlay").click(); };
+$("videoFile").onchange = async (e) => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  if (f.size > 8.5e6) return toast("File too big (max ~8MB). Use a link instead.", true);
+  playVideo({ name: f.name, data: await fileB64(f) });
+};
+$("videoStop").onclick = () => api("/video", { stop: true }).then(() => toast("Stopped"));
+
+const startTimer = (min) => api("/timer", { secs: Math.round(min * 60), label: $("timerLabel").value.trim() })
+  .then(() => { toast("Timer started"); poll(); }).catch((e) => toast(e.message, true));
+document.querySelectorAll("[data-min]").forEach((b) => (b.onclick = () => { $("timerMin").value = b.dataset.min; startTimer(+b.dataset.min); }));
+$("timerStart").onclick = () => startTimer(+$("timerMin").value);
+$("timerAdd").onclick = () => api("/timer", { add: 60 }).then(poll);
+$("timerStop").onclick = () => api("/timer", { stop: true }).then(poll);
+
+// ---- microphone: captured and analysed here, only band levels go to the daemon
+let mic = null;
+async function micStart() {
+  const stream = await navigator.mediaDevices.getUserMedia(
+    { audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+  const ctx = new AudioContext();
+  const an = Object.assign(ctx.createAnalyser(), { fftSize: 1024, smoothingTimeConstant: 0.4, minDecibels: -85, maxDecibels: -25 });
+  ctx.createMediaStreamSource(stream).connect(an);
+  const freq = new Uint8Array(an.frequencyBinCount), wave = new Float32Array(an.fftSize);
+  const hz = ctx.sampleRate / an.fftSize;  // log-spaced bands, 60Hz..8kHz
+  const edges = [...Array(17)].map((_, i) => Math.round(60 * (8000 / 60) ** (i / 16) / hz));
+  for (let i = 1; i < 17; i++) edges[i] = Math.max(edges[i], edges[i - 1] + 1);
+  const timer = setInterval(() => {
+    an.getByteFrequencyData(freq); an.getFloatTimeDomainData(wave);
+    const bands = edges.slice(0, 16).map((e, i) => { let m = 0; for (let k = e; k < edges[i + 1]; k++) m = Math.max(m, freq[k]); return m / 255; });
+    const rms = Math.sqrt(wave.reduce((a, v) => a + v * v, 0) / wave.length);
+    document.querySelectorAll(".micMeter").forEach((m) => (m.style.width = Math.min(100, rms * 400) + "%"));
+    fetch("/mic", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bands, rms }) }).catch(() => {});
+  }, 50);
+  mic = { stream, ctx, timer };
+}
+function micStop() {
+  if (!mic) return;
+  clearInterval(mic.timer); mic.stream.getTracks().forEach((t) => t.stop()); mic.ctx.close(); mic = null;
+  document.querySelectorAll(".micMeter").forEach((m) => (m.style.width = "0"));
+}
+const remember = (k, v) => { try { v === undefined ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} };
+const setMicToggles = (on) => document.querySelectorAll(".micToggle").forEach((t) => (t.checked = on));
+document.querySelectorAll(".micToggle").forEach((t) => (t.onchange = async (e) => {
+  setMicToggles(e.target.checked);
+  if (!e.target.checked) { micStop(); remember("mic"); return; }
+  try { await micStart(); remember("mic", "1"); toast("Listening — only levels leave this tab"); }
+  catch (err) { setMicToggles(false); toast("Microphone blocked: " + err.message, true); }
+}));
+
+// ---- LED glow: a blurred copy of the preview blooms into the gaps between dots
+new MutationObserver(() => (document.querySelector(".bloom").src = $("draftPreview").src))
+  .observe($("draftPreview"), { attributes: true, attributeFilter: ["src"] });
+
+// ---- skin cards show a tiny render of themselves, so you pick by sight
+async function renderThumbs() {
+  const base = Object.fromEntries(DRAFT_KEYS.filter((k) => k !== "city").map((k) => [k, draft[k]]));
+  for (const b of document.querySelectorAll(".skin")) {
+    let img = b.querySelector(".thumb img");
+    if (!img) {
+      const t = document.createElement("span"); t.className = "thumb";
+      img = document.createElement("img"); img.alt = ""; t.append(img); b.prepend(t);
+    }
+    try {
+      const r = await fetch("/render", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...base, skin: b.dataset.skin }) });
+      if (!r.ok) continue;
+      const old = img.src; img.src = URL.createObjectURL(await r.blob());
+      if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+    } catch {}
+  }
+}
+
+// ---- top-level views
+function showView(id) {
+  document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.dataset.view === id));
+  document.querySelectorAll(".viewpane").forEach((p) => p.classList.toggle("active", p.id === id));
+  remember("view", id);
+}
+document.querySelectorAll(".view").forEach((v) => (v.onclick = () => showView(v.dataset.view)));
+try { const v = localStorage.getItem("view"); if (v && $(v)) showView(v); } catch {}
+
+$("scanBtn").onclick = async () => {
+  $("scanBtn").disabled = true; $("scanStatus").textContent = "Looking for panels… (about 6 seconds)";
+  try {
+    const found = await api("/setup/scan", {});
+    $("scanStatus").textContent = found.length ? "Pick yours:" : "No panel found. Is it on, and its phone app closed?";
+    $("scanList").replaceChildren(...found.map((d) => {
+      const b = document.createElement("button"); b.className = "chip pick"; b.textContent = `${d.name} · ${d.address.slice(-5)}`;
+      b.onclick = () => api("/setup/pair", { address: d.address })
+        .then(() => { toast("Paired with " + d.name + ". Connecting…"); poll(); }).catch((e) => toast(e.message, true));
+      return b;
+    }));
+  } catch (e) { $("scanStatus").textContent = "Scan failed: " + e.message; }
+  finally { $("scanBtn").disabled = false; }
+};
+
+async function loadTricks() {
+  const tricks = await api("/cat/tricks");
+  $("tricks").replaceChildren(...Object.entries(tricks).map(([id, label]) => {
+    const b = document.createElement("button"); b.className = "chip pick"; b.textContent = label;
+    b.onclick = () => api("/cat", { do: id }).catch((e) => toast(e.message, true)); return b;
+  }));
+}
+
+async function loadVis() {
+  const styles = await api("/vis_styles");
+  $("visList").replaceChildren(...Object.entries(styles).map(([id, label]) => {
+    const b = document.createElement("button"); b.className = "chip pick"; b.dataset.id = id; b.textContent = label;
+    b.onclick = () => edit({ vis_style: id, skin: "visualizer" }); return b;
+  }));
+  render();
+}
+async function loadGames() {
+  GAMES = await api("/games");
+  $("gameList").replaceChildren(...GAMES.map((g) => {
+    const b = document.createElement("button"); b.className = "chip pick"; b.dataset.id = g.id; b.textContent = g.title;
+    b.onclick = () => { gamePick = g.id; renderGamePick(); }; return b;
+  }));
+  render();
+}
+document.querySelectorAll("#pad button").forEach((b) => (b.onpointerdown = (e) => { e.preventDefault(); steer(b.dataset.dir); }));
+const KEYS = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right", w: "up", s: "down", a: "left", d: "right",
+  " ": "action", Enter: "action" };
+document.addEventListener("keydown", (e) => {
+  if (!playing || e.target.closest("input, select, textarea") || !KEYS[e.key]) return;
+  e.preventDefault(); steer(KEYS[e.key]);
+});
+setInterval(() => { if (playing) $("gameView").src = "/preview?" + Date.now(); }, 120);
+
+window.addEventListener("beforeunload", (e) => { if (changes().length) e.preventDefault(); });
+
+(async () => {
+  for (const m of await api("/modules")) CATALOG[m.id] = m;
+  LAYOUTS = await api("/layouts");
+  try {  // resume listening if it was on last time and the browser still has permission
+    if (localStorage.getItem("mic") && (await navigator.permissions.query({ name: "microphone" })).state === "granted") {
+      await micStart(); setMicToggles(true);
+    }
+  } catch {}
+  applied = await api("/config"); draft = clone(applied);
+  render(); renderPreview(); renderThumbs(); loadLibrary(); loadPresets(); loadGames(); loadVis(); loadTricks(); poll();
+  setInterval(() => !document.hidden && renderThumbs(), 20000);
+  setInterval(poll, 1000);
+  setInterval(() => draft.skin === "dashboard" && renderPreview(), 5000);
+  setInterval(() => ["visualizer", "cat"].includes(draft.skin) && !document.hidden && renderPreview(), 250);  // animate the draft  // keep the clock in the preview current
+})();
+</script>
+</body>
+</html>
