@@ -21,7 +21,7 @@ def config_dir() -> Path:
         d = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / APP
     else:
         d = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / APP
-    old = Path.home() / ".config" / "idotmatrix"  # pre-release name: carry settings, GIFs and the paired panel over
+    old = d.with_name("idotmatrix")  # pre-release name, same base dir: carry settings, GIFs and the paired panel over
     if not d.exists() and old.is_dir():
         shutil.copytree(old, d)
     d.mkdir(parents=True, exist_ok=True)

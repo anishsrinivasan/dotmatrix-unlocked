@@ -2,6 +2,15 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.10 · 2026-10-19
+
+### Fixed
+- The Cat preview showed a separate copy of the cat, so petting and talking only appeared on the panel and in the
+  small live view. The preview now shows the same cat as the panel.
+- The listening bubble's "?" was too pale to read on the panel.
+- A custom `XDG_CONFIG_HOME` picked up settings from `~/.config/idotmatrix` (the pre-release name). Settings now
+  carry over only from the same config folder.
+
 ## 0.1.9 · 2026-10-19
 
 ### Added

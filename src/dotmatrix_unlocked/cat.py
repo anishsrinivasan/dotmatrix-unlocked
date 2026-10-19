@@ -380,7 +380,7 @@ def _act_listen(img, u, r):  # ears up, leaning in, sound waves coming in from t
         for dy in range(-k - 1, k + 2):
             _put(px, x - abs(dy) // 2, 18 + dy, tuple(int(v * (1 - p * 0.7)) for v in (120, 200, 255)))
     draw_cat(img, 11, 16, "open", (-1, 0), tail=int(u * 2))
-    _bubble(img, "?" if int(u * 2) % 2 else " ? ", (120, 200, 255))  # all ears
+    _bubble(img, "?" if int(u * 2) % 2 else " ? ", (30, 110, 230))  # all ears
 
 
 def _act_speak(img, u, env):  # mouth follows the loudness of the playback; env = levels 0..1 at TALK_HZ

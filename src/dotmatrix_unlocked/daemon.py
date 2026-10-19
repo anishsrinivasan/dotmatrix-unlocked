@@ -199,7 +199,7 @@ class State:
         self.game: game.Game | None = None
         self.video: video.Player | None = None
         self.video_error: str | None = None
-        self.cat, self.cat_draft = cat.Cat(time.time(), seed=int(time.time())), cat.Cat(time.time(), seed=1)
+        self.cat = cat.Cat(time.time(), seed=int(time.time()))  # one cat: the preview shows what the panel shows
         try:  # its needs survive restarts (and keep drifting while we're off)
             self.cat.load(json.loads(CAT_FILE.read_text()))
         except (OSError, ValueError):
@@ -289,7 +289,7 @@ class State:
         if tm:
             return "timer", "frame", render.timer(tm["end"] - now, tm["total"], tm["label"], now)
         if skin == "cat":
-            return "cat", "frame", (self.cat_draft if draft else self.cat).frame(now, self.cat_ctx(self.mic.clapped()))
+            return "cat", "frame", self.cat.frame(now, self.cat_ctx(False if draft else self.mic.clapped()))
         if skin == "video":
             return "video", "frame", skins.video_idle()
         if skin == "games":
