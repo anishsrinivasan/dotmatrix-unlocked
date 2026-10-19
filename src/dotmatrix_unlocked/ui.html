@@ -472,6 +472,12 @@
       </section>
 
       <section class="card">
+        <h2>Background</h2>
+        <div class="row"><div><label for="bgSwitch">Run in the background</label><small id="bgStatus">Keeps the panel going with no terminal open, and starts it when you log in</small></div>
+          <label class="switch"><input type="checkbox" id="bgSwitch"><span></span></label></div>
+      </section>
+
+      <section class="card">
         <h2>Claude Code</h2>
         <div class="row"><div><label for="interrupt">Switch to the dashboard when Claude needs input</label><small>Interrupts album, vinyl, GIF, visualizer and cat</small></div>
           <label class="switch"><input type="checkbox" id="interrupt" data-key="interrupt_on_input"><span></span></label></div>
@@ -610,6 +616,12 @@ async function poll() {
       greet: "happy you're back", work: "typing along with Claude", dance: "dancing to " + (s.music?.title || "music") };
     $("catMood").textContent = "The cat is " + (MOOD[s.cat_mood] || "up to random mischief") + ".";
     $("setupCard").hidden = s.paired;
+    if (!bgBusy) {
+      $("bgSwitch").checked = s.service_installed; bgSelf = s.service;
+      $("bgStatus").textContent = s.service ? "On: running in the background, starts when you log in."
+        : s.service_installed ? "On: starts when you log in. This copy is running in a terminal."
+        : "Off: stops when you close the terminal that started it.";
+    }
     playing = !!s.game;
     $("gameScore").textContent = s.game ? (s.game.title === $("gameTitle").textContent ? "" : s.game.title + " ") + `${s.game.over ? "game over" : "score"} · ${s.game.score}` : "not playing";
     $("gameStart").textContent = s.game ? "Restart" : "Play";
@@ -618,6 +630,20 @@ async function poll() {
     if (s.preview_crc !== lastCrc) { lastCrc = s.preview_crc; $("livePreview").src = "/preview?" + s.preview_crc; }
   } catch { $("conn").classList.remove("on"); $("connText").textContent = "daemon not running"; }
 }
+
+// ---- background service
+let bgBusy = false, bgSelf = false;  // bgSelf: this copy is the background one
+$("bgSwitch").onchange = async (e) => {
+  const on = e.target.checked;
+  if (!on && bgSelf && !confirm("Stop running in the background? The panel and this page stop now; run `dotmatrix` to start again.")) {
+    e.target.checked = true; return;
+  }
+  bgBusy = true;
+  $("bgStatus").textContent = on ? "Moving to the background… this page reconnects in a few seconds."
+    : bgSelf ? "Stopped. Run `dotmatrix` in a terminal to start again." : "Off: it won't start at login.";
+  try { await api("/service", { on }); } catch (err) { toast(err.message, true); }
+  setTimeout(() => (bgBusy = false), 8000);
+};
 
 // ---- GIF sources
 function tile({ name, src, label, pixel, onclick, ondelete }) {

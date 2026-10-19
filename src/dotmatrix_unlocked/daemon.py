@@ -385,7 +385,7 @@ class Handler(BaseHTTPRequestHandler):
             now, m = time.time(), state.music
             return self._json(200, {
                 "connected": state.connected, "showing": state.current, "paired": bool(state.address) or FAKE,
-                "fake": FAKE,
+                "fake": FAKE, "service": SERVICE, "service_installed": system.service_installed(),
                 "preview_crc": zlib.crc32(state.preview[1]), "skin": state.cfg["skin"],
                 "secs_since_ack": round(time.monotonic() - state.last_ack),
                 "weather": state.weather, "city": state.cfg["city"],
@@ -429,6 +429,9 @@ class Handler(BaseHTTPRequestHandler):
                     raise ValueError("bad address")
                 device.save_address(addr)
                 state.address = addr
+                return self._json(200, {"ok": True})
+            if self.path == "/service":  # run in the background (start at login) or stop doing so
+                threading.Thread(target=handover if body.get("on") else system.service_uninstall, daemon=True).start()
                 return self._json(200, {"ok": True})
             if self.path == "/mic":  # levels from the web UI's microphone
                 state.mic.update(body.get("bands"), body.get("rms", 0))
@@ -660,18 +663,32 @@ async def display_loop(fake: bool) -> None:
 
 
 FAKE = False
+SERVICE = False  # this copy was started by the service manager
+SERVER: ThreadingHTTPServer | None = None
 
 
-async def main(port: int = PORT, fake: bool = False, open_browser: bool = False, log_file: str | None = None) -> None:
-    global PORT, FAKE
-    PORT, FAKE = port, fake
+def handover() -> None:
+    """Foreground copy → background service: free the port (and, on exit, the Bluetooth link), install, quit."""
+    time.sleep(0.3)  # let the HTTP reply go out
+    SERVER.shutdown()
+    SERVER.server_close()
+    try:
+        log.info("now running in the background: %s", system.service_install())
+    finally:
+        os._exit(0)
+
+
+async def main(port: int = PORT, fake: bool = False, open_browser: bool = False, log_file: str | None = None,
+               service: bool = False) -> None:
+    global PORT, FAKE, SERVICE, SERVER
+    PORT, FAKE, SERVICE = port, fake, service
     handlers = [logging.StreamHandler()] + ([logging.FileHandler(log_file)] if log_file else [])
     logging.basicConfig(force=True, level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s",
                         handlers=handlers)
     logging.getLogger("bleak").setLevel(logging.WARNING)
     Handler.loop = asyncio.get_running_loop()
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+        server = SERVER = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
         raise SystemExit(f"port {PORT} is busy: is dotmatrix already running? (try `dotmatrix status`)")
     threading.Thread(target=server.serve_forever, daemon=True).start()

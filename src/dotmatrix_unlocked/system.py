@@ -153,7 +153,7 @@ def _service_cmd(log_file: Path) -> list[str]:
     py = sys.executable
     if WIN and py.lower().endswith("python.exe"):
         py = py[:-10] + "pythonw.exe"  # no console window
-    return [py, "-m", "dotmatrix_unlocked", "run", "--no-browser", "--log-file", str(log_file)]
+    return [py, "-m", "dotmatrix_unlocked", "run", "--service", "--log-file", str(log_file)]
 
 
 def service_file() -> Path | None:

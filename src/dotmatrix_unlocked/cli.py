@@ -118,6 +118,19 @@ def hook(port: int) -> None:
         pass
 
 
+def background(port: int) -> None:
+    """Wait for the freshly installed service to answer, then open the web UI."""
+    import time
+    import webbrowser
+    for _ in range(30):
+        if running(port):
+            print(f"running in the background → {daemon_url(port)}  (stop: `dotmatrix service uninstall`)")
+            webbrowser.open(daemon_url(port))
+            return
+        time.sleep(0.5)
+    print("installed, but it isn't answering yet; check `dotmatrix doctor`")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="dotmatrix", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--port", type=int, default=PORT)
@@ -127,6 +140,7 @@ def main() -> None:
     r.add_argument("--fake", action="store_true", help="no panel needed: the web preview is the display")
     r.add_argument("--no-browser", action="store_true")
     r.add_argument("--log-file")
+    r.add_argument("--service", action="store_true", help=argparse.SUPPRESS)  # started by the service manager
     sv = sub.add_parser("service", help="start at login")
     sv.add_argument("action", choices=["install", "uninstall", "status"])
     hk = sub.add_parser("hooks", help="Claude Code integration")
@@ -156,19 +170,33 @@ def main() -> None:
             print(f"already running → {url}")
             webbrowser.open(url)
             return
+        if args.cmd is None and not system.service_installed() and sys.stdin.isatty():
+            ans = input("Run in the background and start at login? Frees this terminal. [Y/n] ").strip().lower()
+            if ans in ("", "y", "yes"):
+                print(system.service_install())
+                background(args.port)
+                return
+            print("Running here; Ctrl+C stops it. (Later: `dotmatrix service install`, or Settings in the web UI.)")
         from . import daemon
+        service = getattr(args, "service", False)
         try:
             asyncio.run(daemon.main(args.port, fake=getattr(args, "fake", False),
-                                    open_browser=args.cmd is None or not args.no_browser,
-                                    log_file=getattr(args, "log_file", None)))
+                                    open_browser=args.cmd is None or not (args.no_browser or service),
+                                    log_file=getattr(args, "log_file", None), service=service))
         except KeyboardInterrupt:
             pass
     elif args.cmd == "service":
         if args.action == "status":
             print("installed" if system.service_installed() else "not installed",
                   "· running" if running(args.port) else "· not running")
+        elif args.action == "install":
+            if running(args.port) and not running(args.port).get("service"):
+                raise SystemExit("dotmatrix is running in a terminal; stop it (Ctrl+C) first, "
+                                 "or turn on Run in the background in the web UI's Settings")
+            print(system.service_install())
+            background(args.port)
         else:
-            print((system.service_install if args.action == "install" else system.service_uninstall)())
+            print(system.service_uninstall())
     elif args.cmd == "hooks":
         print(system.hooks_install(args.port) if args.action == "install" else system.hooks_uninstall())
     elif args.cmd == "hook":
