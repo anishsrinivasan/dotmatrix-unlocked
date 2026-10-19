@@ -2,6 +2,15 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.6 · 2026-10-19
+
+### Added
+- **Karaoke** skin: time-synced lyrics of whatever is playing, the current line in white and the next one dimmed.
+  Works with Spotify, Apple Music, browsers and anything else the OS reports as now playing. Lyrics come from
+  LRCLIB (free, no key, no Spotify login), fetched only while the skin is in use. A **Timing** slider shifts lines
+  up to 3 seconds either way.
+- Now playing reports the play position on macOS, Linux and Windows.
+
 ## 0.1.5 · 2026-10-19
 
 ### Added

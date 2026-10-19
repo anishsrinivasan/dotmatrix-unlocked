@@ -22,6 +22,7 @@ from . import cat
 from . import device
 from . import mic
 from . import game
+from . import lyrics
 from . import markets
 from . import render
 from . import skins
@@ -44,11 +45,11 @@ MAX_BODY = 12_000_000
 TIMER_RING = 15  # seconds TIME UP flashes before the display goes back
 GIF_NAME = re.compile(r"^[a-z0-9_-]{1,40}\.gif$")
 
-SKINS = ("dashboard", "album", "vinyl", "gif", "visualizer", "games", "video", "cat", "markets")
+SKINS = ("dashboard", "album", "vinyl", "gif", "visualizer", "games", "video", "cat", "markets", "karaoke")
 DEFAULTS = {**render.DEFAULT_CFG, "skin": "dashboard", "brightness": 80, "gamma": 2.2, "interrupt_on_input": True,
             "city": "", "lat": None, "lon": None, "gif": None, "giphy_key": "",
             "saved_skins": {}, "game": "snake", "vis_style": "bars",
-            "markets": ["GOLD", "SILVER", "USDINR", "AAPL", "NVDA"], "markets_vs": "prev", "markets_show": "both"}
+            "markets": ["GOLD", "SILVER", "USDINR", "AAPL", "NVDA"], "markets_vs": "prev", "markets_show": "both", "lyrics_offset": 0.0}
 
 # Hook event -> session state. https://code.claude.com/docs/en/hooks
 INPUT_NOTIFICATIONS = {"permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"}
@@ -132,6 +133,8 @@ def validated(cfg: dict, patch: dict) -> dict:
             new[k] = max(1.0, min(3.5, float(v)))
         elif k == "anim_fps":
             new[k] = max(0.2, min(2.0, float(v)))
+        elif k == "lyrics_offset":  # seconds; + shows lines earlier (Bluetooth lag, players that report late)
+            new[k] = max(-3.0, min(3.0, round(float(v), 1)))
         elif k == "page_secs":
             new[k] = max(1.0, min(30.0, float(v)))
         elif k == "vis_style":
@@ -208,6 +211,8 @@ class State:
         self.markets_wanted = 0.0  # last time the markets skin was previewed
         self.markets_wake: asyncio.Event | None = None
         self.markets_draft: tuple[list[str], str] = ([], "prev")  # what the preview shows
+        self.lyrics: tuple[str, list | None] = ("", None)  # (track key, synced lines; [] = none found)
+        self.lyrics_wanted = 0.0  # last time the karaoke skin was previewed
         self._gifs: dict[str, tuple[str, bytes, bytes]] = {}  # key -> (key, preview gif, gamma-corrected gif)
 
     def want_markets(self, items: list[str], vs: str) -> None:
@@ -289,6 +294,12 @@ class State:
         if skin == "markets":
             quotes = {i: q for (i, vs), q in self.quotes.items() if vs == cfg["markets_vs"]}
             return "markets", "frame", markets.frame(cfg["markets"], quotes, now, cfg["page_secs"], cfg["markets_show"])
+        if skin == "karaoke":
+            if not music:
+                return "karaoke", "frame", skins.nothing_playing()
+            lines = self.lyrics[1] if self.lyrics[0] == music["key"] else None
+            pos = music["pos"] + (now - music["at"]) + cfg["lyrics_offset"] if music.get("pos") is not None else None
+            return "karaoke", "frame", lyrics.frame(lines, pos, music["title"])
         if skin == "album":
             art = (music and music["art"]) or self.last_art
             return "album", "frame", skins.album(art) if art else skins.nothing_playing()
@@ -539,6 +550,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"ok": True, "id": sid})
             if self.path == "/render":
                 draft = validated(state.cfg, {k: v for k, v in body.items() if k not in ("city", "giphy_key", "thumb")})
+                if draft["skin"] == "karaoke" and not body.get("thumb"):
+                    state.lyrics_wanted = time.time()
                 if draft["skin"] == "markets" and not body.get("thumb"):  # previewing it: fetch quotes now
                     state.want_markets(draft["markets"], draft["markets_vs"])
                 _, kind, payload = state.output(draft)
@@ -656,6 +669,7 @@ async def music_loop() -> None:
     if hint := system.now_playing_source():
         log.warning("now playing disabled: %s", hint)
         return
+    lyrics_retry = 0.0
     while True:
         try:
             d = await asyncio.to_thread(system.now_playing)
@@ -664,12 +678,24 @@ async def music_loop() -> None:
                 if not state.music or state.music["key"] != key:
                     art = Image.open(io.BytesIO(d["art"])).convert("RGB") if d["art"] else None
                     state.last_art = art or state.last_art
-                    state.music = {**d, "art": art, "key": key}
+                    state.music = {**d, "art": art, "key": key, "at": time.time()}
                     log.info("now playing %s", key)
+                else:  # same track: just the position, which moves on every poll (and on seeks)
+                    state.music = {**state.music, "pos": d.get("pos"), "at": time.time()}
             else:
                 state.music = None
         except Exception as e:
             log.debug("now playing: %s", e)
+        m, now = state.music, time.time()
+        if (m and state.lyrics[0] != m["key"] and now >= lyrics_retry
+                and (state.cfg["skin"] == "karaoke" or now - state.lyrics_wanted < 120)):
+            try:  # only while the karaoke skin is in use: the title and artist go to lrclib.net
+                lines = await asyncio.to_thread(lyrics.fetch, m["title"], m["artist"], m["album"], m.get("duration"))
+                state.lyrics = (m["key"], lines)
+                log.info("lyrics: %d lines for %s", len(lines), m["title"])
+            except Exception as e:
+                log.warning("lyrics fetch failed: %s", e)
+                lyrics_retry = now + 60
         await asyncio.sleep(MUSIC_POLL)
 
 
@@ -713,7 +739,7 @@ async def display_loop(fake: bool) -> None:
                 sig, send = key, lambda: dev.show_gif(dev_gif)
             now = time.monotonic()
             ok = None
-            live = state.game or state.video or state.current in ("visualizer", "cat", "timer")  # ~35ms per frame, so these skip the 1s limit
+            live = state.game or state.video or state.current in ("visualizer", "cat", "timer", "karaoke")  # ~35ms per frame, so these skip the 1s limit
             if sig != last_sig and now - last_send >= (0 if live else MIN_SEND_GAP):
                 ok = await asyncio.wait_for(send(), 30)
                 if live:

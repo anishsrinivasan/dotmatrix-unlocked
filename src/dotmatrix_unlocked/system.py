@@ -9,6 +9,7 @@ import sys
 import time
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 APP = "dotmatrix-unlocked"
@@ -51,7 +52,8 @@ def _run(args: list[str], timeout: float = 10) -> str | None:
         return None
 
 
-# ---- now playing: {title, artist, album, art: bytes|None} or None when nothing is playing
+# ---- now playing: {title, artist, album, art: bytes|None, pos: seconds|None, duration: seconds|None}
+# or None when nothing is playing. pos is the play position right now (for synced lyrics).
 def now_playing() -> dict | None:
     if MAC:
         return _np_mac()
@@ -83,15 +85,19 @@ def _np_mac():
     if not (d.get("title") and d.get("playing")):
         return None
     art = base64.b64decode(d["artworkData"]) if d.get("artworkData") else None
-    return {"title": d["title"], "artist": d.get("artist", ""), "album": d.get("album", ""), "art": art}
+    pos = d.get("elapsedTime")
+    if pos is not None and d.get("timestamp"):  # elapsedTime was true at timestamp (whole seconds only)
+        pos += (time.time() - datetime.fromisoformat(d["timestamp"]).timestamp()) * d.get("playbackRate", 1)
+    return {"title": d["title"], "artist": d.get("artist", ""), "album": d.get("album", ""), "art": art,
+            "pos": pos, "duration": d.get("duration")}
 
 
 def _np_linux():
     exe = tool("playerctl")  # any MPRIS player: Spotify, browsers, VLC, mpv...
-    out = exe and _run([exe, "metadata", "--format", "{{status}}\t{{title}}\t{{artist}}\t{{album}}\t{{mpris:artUrl}}"])
+    out = exe and _run([exe, "metadata", "--format", "{{status}}\t{{title}}\t{{artist}}\t{{album}}\t{{mpris:artUrl}}\t{{position}}\t{{mpris:length}}"])
     if not out:
         return None
-    status, title, artist, album, art_url = (out.rstrip("\n").split("\t") + [""] * 5)[:5]
+    status, title, artist, album, art_url, pos, length = (out.rstrip("\n").split("\t") + [""] * 7)[:7]
     if status != "Playing" or not title:
         return None
     art = None
@@ -102,7 +108,8 @@ def _np_linux():
             art = urllib.request.urlopen(art_url, timeout=5).read(2_000_000)
     except OSError:
         pass
-    return {"title": title, "artist": artist, "album": album, "art": art}
+    us = lambda v: int(v) / 1e6 if v.isdigit() else None  # MPRIS times are microseconds
+    return {"title": title, "artist": artist, "album": album, "art": art, "pos": us(pos), "duration": us(length)}
 
 
 def _np_windows():
@@ -118,7 +125,10 @@ def _np_windows():
         if not session or session.get_playback_info().playback_status != 4:  # 4 = Playing
             return None
         p = await session.try_get_media_properties_async()
-        return {"title": p.title, "artist": p.artist, "album": p.album_title, "art": None} if p.title else None
+        tl = session.get_timeline_properties()
+        pos = tl.position.total_seconds() + (time.time() - tl.last_updated_time.timestamp())
+        return {"title": p.title, "artist": p.artist, "album": p.album_title, "art": None,
+                "pos": pos, "duration": tl.end_time.total_seconds() or None} if p.title else None
     return asyncio.run(get())
 
 

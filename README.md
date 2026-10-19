@@ -15,10 +15,12 @@ with a local web UI.
 - 12 ready-made screens (Classic, Big clock, Weather station, Night owl, Calendar, Claude ops…). Reorder modules,
   pick fonts and colours, then save your own layouts.
 - **Skins:** album art, a spinning vinyl, GIFs, a Winamp-style **visualizer** (7 styles), a mischievous pixel
-  **cat**, and **Markets**.
+  **cat**, **Karaoke**, and **Markets**.
 - **Markets:** pick what to track: gold (24K/22K per gram), silver per kg, the rupee against USD, EUR, GBP, AED,
   SGD and JPY, Nifty 50, Nifty Bank, Brent, and any US stock ticker. Show the price, the change (+/−%), or both,
   since the previous close, a week or a month ago, or any date you pick. Free, no API keys.
+- **Karaoke:** time-synced lyrics of whatever is playing (Spotify, Apple Music, YouTube in a browser…), line by
+  line, from [LRCLIB](https://lrclib.net). Free, no login; a timing slider fixes lines that run late.
 - **GIF library:** 16 built-in animations, GIPHY search, or upload your own. GIFs are re-tuned for LEDs, with
   sharper shrinking, a contrast stretch and no dither noise.
 
@@ -94,7 +96,8 @@ service starts without anyone logging in.
 - The microphone (visualizer, clap-to-startle the cat) is **off by default**. It runs inside your browser, and
   only 16 loudness levels are sent to the local service; no audio leaves the browser.
 - Network calls: Open-Meteo for weather and snapdata.dev for air quality (only once you set a city); snapdata.dev
-  and Yahoo Finance for Markets (only while that skin is in use); GIPHY if you add a key; and video links you paste.
+  and Yahoo Finance for Markets (only while that skin is in use); lrclib.net
+  for Karaoke (the song's title and artist, only while that skin is in use); GIPHY if you add a key; and video links you paste.
 
 ## Command line
 
@@ -133,5 +136,5 @@ See [CHANGELOG.md](CHANGELOG.md). Each GitHub release carries its section.
 GPL-3.0-or-later. It builds on [python3-idotmatrix-library](https://github.com/derkalle4/python3-idotmatrix-library),
 which is also GPL-3.0.
 
-Market and air-quality data: [snapdata.dev](https://snapdata.dev) (IBJA, ECB, CPCB, EIA), and Yahoo Finance for US
+Lyrics: [LRCLIB](https://lrclib.net), community-made. Market and air-quality data: [snapdata.dev](https://snapdata.dev) (IBJA, ECB, CPCB, EIA), and Yahoo Finance for US
 stocks. Prices are for display only, not trading.

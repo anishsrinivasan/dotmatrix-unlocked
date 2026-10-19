@@ -304,6 +304,7 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
           <button class="skin" data-skin="visualizer"><b>Visualizer</b><small>Winamp-style bars to your music</small></button>
           <button class="skin" data-skin="cat"><b>Cat</b><small>A mischievous pixel cat</small></button>
           <button class="skin" data-skin="markets"><b>Markets</b><small>Gold, silver, rupee and US stocks</small></button>
+          <button class="skin" data-skin="karaoke"><b>Karaoke</b><small>Synced lyrics of what's playing</small></button>
         </div>
       </section>
 
@@ -403,6 +404,16 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
         <p class="empty">Green is up, red is down, with a + or − in change mode. Gold, silver, USD → ₹, Nifty and Brent update daily
           (IBJA, ECB via snapdata.dev); stocks every 5 minutes from Yahoo Finance. Fetched only while this skin is in use.
           Nifty has no history yet, so it shows no change.</p>
+      </section>
+
+      <section class="card" id="karaokeCard">
+        <h2>Karaoke</h2>
+        <div class="row"><div><label for="lyOffset">Timing</label><small>Lines late? Slide right to show them earlier.</small></div>
+          <div class="inline"><input type="range" id="lyOffset" data-key="lyrics_offset" min="-3" max="3" step="0.1"><span class="val" id="lyOffsetVal"></span></div></div>
+        <p class="empty">Plays along with Spotify, Apple Music, YouTube in your browser, or anything else your computer
+          reports as now playing. Lyrics come from LRCLIB, free and community-made, so some songs have none. Only songs
+          with timed lyrics work, and only letters A–Z show on the panel. While this skin is in use, the song's title
+          and artist are sent to lrclib.net.</p>
       </section>
 
       <section class="card" id="catCard">
@@ -532,7 +543,7 @@ let applied = null, draft = null, library = [], lastCrc = null, draftUrl = null;
 const INFO = { album: "Album art has no settings. Shows the cover of what's playing, or the last cover seen.",
   vinyl: "Vinyl has no settings. The record spins with the album cover on its label; a default label when nothing plays." };
 let gamePick = "snake";  // live choice, not part of the draft
-const LABELS = { skin: "skin", gif: "GIF", vis_style: "visualizer style", layout: "modules", clock_24h: "clock format", anim_fps: "animation speed", page_secs: "page time", interrupt_on_input: "input override", brightness: "brightness", markets: "markets", markets_vs: "change since", markets_show: "markets display",
+const LABELS = { skin: "skin", gif: "GIF", vis_style: "visualizer style", layout: "modules", clock_24h: "clock format", anim_fps: "animation speed", page_secs: "page time", interrupt_on_input: "input override", brightness: "brightness", markets: "markets", markets_vs: "change since", markets_show: "markets display", lyrics_offset: "lyrics timing",
   gamma: "gamma", city: "city" };
 const DRAFT_KEYS = Object.keys(LABELS);
 
@@ -584,6 +595,7 @@ function render() {
   $("gifCard").hidden = draft.skin !== "gif";
   $("visCard").hidden = draft.skin !== "visualizer";
   $("catCard").hidden = draft.skin !== "cat";
+  $("karaokeCard").hidden = draft.skin !== "karaoke";
   $("marketsCard").hidden = draft.skin !== "markets"; renderMarkets();
   $("dashCard").hidden = draft.skin !== "dashboard";
   $("infoCard").hidden = !INFO[draft.skin];
@@ -595,6 +607,7 @@ function render() {
   });
   if (document.activeElement !== $("city")) $("city").value = draft.city;
   $("fpsVal").textContent = (+draft.anim_fps).toFixed(1); $("pageVal").textContent = draft.page_secs + "s";
+  $("lyOffsetVal").textContent = (draft.lyrics_offset > 0 ? "+" : "") + (+draft.lyrics_offset).toFixed(1) + "s";
   $("brightVal").textContent = draft.brightness + "%"; $("gammaVal").textContent = (+draft.gamma).toFixed(1);
   document.querySelectorAll("#library .tile, #presets .tile").forEach((t) =>
     t.classList.toggle("active", draft.skin === "gif" && t.dataset.name === draft.gif));
@@ -1074,7 +1087,7 @@ window.addEventListener("beforeunload", (e) => { if (changes().length) e.prevent
   setInterval(() => !document.hidden && renderThumbs(), 20000);
   setInterval(poll, 1000);
   setInterval(() => ["dashboard", "markets"].includes(draft.skin) && renderPreview(), 5000);  // clock ticks, quotes arrive, pages flip
-  setInterval(() => ["visualizer", "cat"].includes(draft.skin) && !document.hidden && renderPreview(), 250);  // animate the draft  // keep the clock in the preview current
+  setInterval(() => ["visualizer", "cat", "karaoke"].includes(draft.skin) && !document.hidden && renderPreview(), 250);  // animate the draft  // keep the clock in the preview current
 })();
 </script>
 </body>

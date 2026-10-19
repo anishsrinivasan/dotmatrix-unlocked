@@ -12,7 +12,7 @@ import urllib.request
 
 import pytest
 
-MODULES = ["render", "skins", "game", "cat", "mic", "system", "video", "markets"]
+MODULES = ["render", "skins", "game", "cat", "mic", "system", "video", "markets", "lyrics"]
 
 
 @pytest.mark.parametrize("module", MODULES)
@@ -81,6 +81,14 @@ def test_fake_device_end_to_end(tmp_path):
             time.sleep(0.2)
         assert json.loads(call("/status")[1])["showing"] == "markets"
 
+        # karaoke: renders with or without music, timing knob is clamped and validated
+        code, png = call("/render", {"skin": "karaoke"})
+        assert code == 200 and png[:4] == b"\x89PNG"
+        assert json.loads(call("/config", {"skin": "karaoke", "lyrics_offset": 9})[1])["lyrics_offset"] == 3.0
+        with pytest.raises(urllib.error.HTTPError) as e:
+            call("/config", {"lyrics_offset": "soon"})
+        assert e.value.code == 400
+
         # air quality is a dashboard module like any other
         code, png = call("/render", {"skin": "dashboard", "layout": [{"id": "clock"}, {"id": "air"}]})
         assert code == 200 and png[:4] == b"\x89PNG"
@@ -100,3 +108,6 @@ def test_live_sources():
         pytest.skip(f"offline: {e}")
     assert {"GOLD", "USDINR", "EURINR"} <= q.keys(), q
     assert all(v > 0 and c is not None for k, (v, c) in q.items() if k != "AAPL"), q
+    from dotmatrix_unlocked import lyrics
+    lines = lyrics.fetch("Blinding Lights", "The Weeknd", "After Hours", 200)
+    assert len(lines) > 20 and lines[0][0] > 0  # timed lines from lrclib.net
