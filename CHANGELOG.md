@@ -2,6 +2,16 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.7 · 2026-10-19
+
+### Changed
+- Karaoke looks like karaoke: every line has its own vibrant colour and fills in letter by letter as it's sung,
+  upcoming lines show in a dim tint, and the lyrics glide up a row at a time instead of jumping a page.
+
+### Fixed
+- Tamil, Hindi, Telugu, Kannada, Malayalam, Bengali, Gujarati, Punjabi and Odia text showed blank on the panel.
+  It's now romanised (ஒரு நாள் → ORU NAAL), in lyrics and in song titles on the dashboard.
+
 ## 0.1.6 · 2026-10-19
 
 ### Added

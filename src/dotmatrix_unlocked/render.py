@@ -44,9 +44,43 @@ _SMALL = {
 FONTS = {"regular": (FONT, 5), "small": ({k: v.replace(" ", "") for k, v in _SMALL.items()}, 4)}
 
 
+# Indian scripts share one layout (offset within each Unicode block), so one table romanises Tamil, Hindi,
+# Telugu, Kannada, Malayalam, Bengali, Gujarati, Gurmukhi and Odia. Phonetic, not a formal scheme.
+_IND_VOWEL = dict(zip(range(0x05, 0x15), "a aa i ii u uu ri - - e e ai - o o au".split()))
+_IND_CONS = dict(zip(range(0x15, 0x3A), ("k kh g gh ng ch chh j jh ny t th d dh n t th d dh n n p ph b bh m y r r l l zh "
+                                          "v sh sh s h").split()))
+_IND_CONS |= dict(zip(range(0x58, 0x60), "q kh g z r rh f y".split())) | dict(zip(range(0x7A, 0x80), "n n r l l k".split()))
+_IND_SIGN = dict(zip(range(0x3E, 0x4D), "aa i ii u uu ri - - e e ai - o o au".split()))
+_IND_MISC = {0x01: "n", 0x02: "m", 0x03: "h", 0x64: ".", 0x65: "."} | {0x66 + d: str(d) for d in range(10)}
+
+
+def indic(s: str) -> str:
+    """Romanise Indian-script text: consonants carry an 'a' that a vowel sign replaces or a virama drops."""
+    out, inherent, hindi = [], False, False
+    for ch in unicodedata.normalize("NFC", s):
+        cp = ord(ch)
+        if not 0x0900 <= cp < 0x0D80:
+            if inherent and hindi and not ch.isalpha():  # Hindi drops a word's last 'a': kamal, not kamala
+                out[-1] = out[-1][:-1]
+            out.append(ch); inherent = False
+            continue
+        o, hindi = cp & 0x7F, cp < 0x0A00
+        if o in _IND_CONS:
+            out.append(_IND_CONS[o] + "a"); inherent = True
+            continue
+        if inherent and (o in _IND_SIGN or o == 0x4D):  # vowel sign or virama replaces the inherent 'a'
+            out[-1] = out[-1][:-1] + _IND_SIGN.get(o, "").replace("-", "")
+        elif o in _IND_VOWEL or o in _IND_MISC:
+            out.append((_IND_VOWEL.get(o) or _IND_MISC.get(o, "")).replace("-", ""))
+        inherent = False
+    if inherent and hindi:
+        out[-1] = out[-1][:-1]
+    return "".join(out)
+
+
 def clean(s: str) -> str:
-    """Uppercase, strip accents, drop anything the font can't draw."""
-    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode().upper()
+    """Uppercase, romanise Indian scripts, strip accents, drop anything the font can't draw."""
+    s = unicodedata.normalize("NFKD", indic(s)).encode("ascii", "ignore").decode().upper()
     return "".join(c for c in s if c in FONT)
 
 
@@ -511,6 +545,8 @@ if __name__ == "__main__":
     assert small.keys() == FONT.keys() and all(len(v) == 12 for v in small.values())
     assert len(set(small.values())) == len(small) - 0, "small glyphs must be distinct"
     assert clean("Beyoncé – Halo!") == "BEYONCE  HALO!"
+    assert clean("ஒரு நாள்") == "ORU NAAL" and clean("தமிழ்") == "TAMIZH" and clean("கண்ணே") == "KANNE"
+    assert clean("दिल से") == "DIL SE" and clean("ಪ್ರೀತಿ") == "PRIITI" and clean("Song (ப்ரேமம்)") == "SONG (PREMAM)"
     assert wrap("HELLO WORLD ABCDEFGHIJ", 7) == ["HELLO", "WORLD", "ABCDEFG", "HIJ"]
     n, w = datetime(2026, 10, 18, 22, 15), {"temp": 27.4, "code": 3, "is_day": False}
     song = {"title": "Blinding Lights", "artist": "The Weeknd"}

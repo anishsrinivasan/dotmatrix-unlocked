@@ -19,8 +19,9 @@ with a local web UI.
 - **Markets:** pick what to track: gold (24K/22K per gram), silver per kg, the rupee against USD, EUR, GBP, AED,
   SGD and JPY, Nifty 50, Nifty Bank, Brent, and any US stock ticker. Show the price, the change (+/−%), or both,
   since the previous close, a week or a month ago, or any date you pick. Free, no API keys.
-- **Karaoke:** time-synced lyrics of whatever is playing (Spotify, Apple Music, YouTube in a browser…), line by
-  line, from [LRCLIB](https://lrclib.net). Free, no login; a timing slider fixes lines that run late.
+- **Karaoke:** time-synced lyrics of whatever is playing (Spotify, Apple Music, YouTube in a browser…), filling in
+  colour as they're sung, from [LRCLIB](https://lrclib.net). Tamil, Hindi and other Indian scripts are romanised.
+  Free, no login; a timing slider fixes lines that run late.
 - **GIF library:** 16 built-in animations, GIPHY search, or upload your own. GIFs are re-tuned for LEDs, with
   sharper shrinking, a contrast stretch and no dither noise.
 
