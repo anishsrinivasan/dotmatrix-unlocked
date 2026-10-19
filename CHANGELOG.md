@@ -2,6 +2,17 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.11 · 2026-10-20
+
+### Changed
+- Talking to the cat now gets real answers instead of an echo. Your browser turns what you say into text, an AI
+  model on [OpenRouter](https://openrouter.ai) replies as the cat, and the browser says it in a squeaky voice while
+  the cat's mouth moves on the panel. Ask for a trick ("do a flip", "want some fish?") and it does it after
+  answering. It knows how it feels (hungry, bored, sleepy) and remembers the last few exchanges.
+- Paste your OpenRouter key in the Cat card and pick any model (default `anthropic/claude-haiku-5.5`). The key is
+  stored with your settings and never sent back to the browser. Without a key, or without speech recognition in
+  your browser, it repeats you as before. `cat_ai_url` points it at any other OpenAI-compatible server.
+
 ## 0.1.10 · 2026-10-19
 
 ### Fixed

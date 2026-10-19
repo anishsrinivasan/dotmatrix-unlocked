@@ -49,7 +49,8 @@ SKINS = ("dashboard", "album", "vinyl", "gif", "visualizer", "games", "video", "
 DEFAULTS = {**render.DEFAULT_CFG, "skin": "dashboard", "brightness": 80, "gamma": 2.2, "interrupt_on_input": True,
             "city": "", "lat": None, "lon": None, "gif": None, "giphy_key": "",
             "saved_skins": {}, "game": "snake", "vis_style": "bars",
-            "markets": ["GOLD", "SILVER", "USDINR", "AAPL", "NVDA"], "markets_vs": "prev", "markets_show": "both", "lyrics_offset": 0.0}
+            "markets": ["GOLD", "SILVER", "USDINR", "AAPL", "NVDA"], "markets_vs": "prev", "markets_show": "both", "lyrics_offset": 0.0,
+            "cat_ai_url": "https://openrouter.ai/api/v1", "cat_ai_model": "anthropic/claude-haiku-5.5", "cat_ai_key": ""}
 
 # Hook event -> session state. https://code.claude.com/docs/en/hooks
 INPUT_NOTIFICATIONS = {"permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"}
@@ -119,6 +120,17 @@ def air_pm25(lat: float, lon: float) -> float | None:
     return sum(vals) / len(vals) if vals else None
 
 
+def ask_ai(messages: list) -> str:
+    """One reply from the chat server in settings: OpenRouter by default, or any OpenAI-compatible one."""
+    if not state.cfg["cat_ai_key"] and "openrouter.ai" in state.cfg["cat_ai_url"]:
+        raise ValueError("no OpenRouter key yet")
+    body = {"model": state.cfg["cat_ai_model"], "messages": messages, "max_tokens": 80, "temperature": 0.9}
+    req = urllib.request.Request(state.cfg["cat_ai_url"].rstrip("/") + "/chat/completions", json.dumps(body).encode(),
+                                 {"Content-Type": "application/json", "Authorization": f"Bearer {state.cfg['cat_ai_key']}",
+                                  "X-Title": "dotmatrix-unlocked"})
+    return json.loads(urllib.request.urlopen(req, timeout=60).read())["choices"][0]["message"]["content"]
+
+
 def validated(cfg: dict, patch: dict) -> dict:
     """Merge a UI patch into a copy of cfg. Raises ValueError on bad input."""
     new = json.loads(json.dumps(cfg))
@@ -135,6 +147,16 @@ def validated(cfg: dict, patch: dict) -> dict:
             new[k] = max(0.2, min(2.0, float(v)))
         elif k == "lyrics_offset":  # seconds; + shows lines earlier (Bluetooth lag, players that report late)
             new[k] = max(-3.0, min(3.0, round(float(v), 1)))
+        elif k == "cat_ai_url":
+            if not re.fullmatch(r"https?://[\w.\[\]:-]+(/[\w./-]*)?", str(v)):
+                raise ValueError("cat_ai_url: an http(s) address like https://openrouter.ai/api/v1")
+            new[k] = str(v)
+        elif k == "cat_ai_model":
+            if not re.fullmatch(r"[\w.:/-]{1,80}", str(v)):
+                raise ValueError("cat_ai_model: a model id like anthropic/claude-haiku-5.5")
+            new[k] = str(v)
+        elif k == "cat_ai_key":
+            new[k] = re.sub(r"[^A-Za-z0-9_-]", "", str(v))[:200]
         elif k == "page_secs":
             new[k] = max(1.0, min(30.0, float(v)))
         elif k == "vis_style":
@@ -413,7 +435,8 @@ class Handler(BaseHTTPRequestHandler):
             ctype, body = state.preview
             return self._send(200, body, ctype)
         if path == "/config":
-            return self._json(200, {**state.cfg, "giphy_key": bool(state.cfg["giphy_key"])})  # never echo the key
+            return self._json(200, {**state.cfg, "giphy_key": bool(state.cfg["giphy_key"]),
+                                    "cat_ai_key": bool(state.cfg["cat_ai_key"])})  # never echo the keys
         if path == "/presets":
             return self._json(200, list(skins.PRESETS))
         if path == "/cat/view":  # the real cat, live, for petting in the web UI
@@ -484,8 +507,22 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/event":
                 self.loop.call_soon_threadsafe(state.event, body)
                 return self._send(204)  # empty body: Claude Code treats it as a no-op hook
-            if self.path == "/cat":  # {"do": trick} | {"pet": head|chin|belly} | {"talk": listen|speak|done, "env"?}
+            if self.path == "/cat":  # {"do": trick} | {"pet": head|chin|belly} | {"talk": listen|speak|done, "env"?} | {"ask": words}
                 now = time.time()
+                if "ask" in body:  # what you said, as text -> its reply, for the browser to speak
+                    said = str(body["ask"]).strip()[:300]
+                    if not said:
+                        raise ValueError("ask: say something")
+                    try:
+                        reply = ask_ai(state.cat.prompt(said))
+                    except (OSError, KeyError, IndexError, ValueError) as e:
+                        return self._json(503, {"error": f"The cat's AI didn't answer ({e}). Check the OpenRouter key "
+                                                         f"and model in the Cat card"})
+                    words, trick, dur = state.cat.answer(said, reply, time.time())
+                    if trick:  # it acts on what you said once it's done talking
+                        threading.Timer(dur, state.cat.do, (trick, now + dur)).start()
+                    state.cat_until = max(state.cat_until, time.time() + dur + (8 if trick else 0))
+                    return self._json(200, {"ok": True, "did": "speak", "reply": words, "trick": trick, "secs": dur})
                 if "talk" in body:
                     did, dur = str(body["talk"]), state.cat.talk(str(body["talk"]), now, body.get("env"))
                 elif "pet" in body:
@@ -567,7 +604,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.loop.call_soon_threadsafe(state.scenes.__setitem__, sid, scene)
                 return self._json(200, {"ok": True, "id": sid})
             if self.path == "/render":
-                draft = validated(state.cfg, {k: v for k, v in body.items() if k not in ("city", "giphy_key", "thumb")})
+                draft = validated(state.cfg, {k: v for k, v in body.items() if k not in ("city", "giphy_key", "cat_ai_key", "thumb")})
                 if draft["skin"] == "karaoke" and not body.get("thumb"):
                     state.lyrics_wanted = time.time()
                 if draft["skin"] == "markets" and not body.get("thumb"):  # previewing it: fetch quotes now
@@ -587,7 +624,7 @@ class Handler(BaseHTTPRequestHandler):
                 CONFIG_FILE.write_text(json.dumps(new, indent=2))
                 if city_changed and state.weather_wake:
                     self.loop.call_soon_threadsafe(state.weather_wake.set)
-                return self._json(200, {**new, "giphy_key": bool(new["giphy_key"])})
+                return self._json(200, {**new, "giphy_key": bool(new["giphy_key"]), "cat_ai_key": bool(new["cat_ai_key"])})
             if self.path == "/gifs":
                 return self._json(200, {"name": save_gif(body)})
             if self.path == "/gifs/delete":

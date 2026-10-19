@@ -101,6 +101,19 @@ def test_fake_device_end_to_end(tmp_path):
         with pytest.raises(urllib.error.HTTPError) as e:
             call("/cat", {"talk": "speak", "env": "loud"})
         assert e.value.code == 400
+        # asking the cat: no AI server is a clear 503 (the browser then repeats you instead), bad settings are 400s
+        with pytest.raises(urllib.error.HTTPError) as e:  # no OpenRouter key yet
+            call("/cat", {"ask": "hello"})
+        assert e.value.code == 503 and b"OpenRouter key" in e.value.read()
+        cfg = json.loads(call("/config", {"cat_ai_key": "sk-or-v1-abc", "cat_ai_url": "http://127.0.0.1:9/v1"})[1])
+        assert cfg["cat_ai_key"] is True  # never echoed back
+        with pytest.raises(urllib.error.HTTPError) as e:
+            call("/cat", {"ask": "hello"})
+        assert e.value.code == 503
+        for bad in ({"cat_ai_url": "file:///etc/passwd"}, {"cat_ai_model": "x; rm"}):
+            with pytest.raises(urllib.error.HTTPError) as e:
+                call("/config", bad)
+            assert e.value.code == 400, bad
         code, png = call("/cat/view")
         assert code == 200 and png[:4] == b"\x89PNG"
         cat = json.loads(call("/status")[1])["cat"]

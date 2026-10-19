@@ -5,6 +5,7 @@ It also has needs (full, energy, fun, love) that drift over real time; when one 
 you look after it by feeding, playing and petting (stroke it in the web UI)."""
 import math
 import random
+import re
 import threading
 
 from PIL import Image
@@ -438,6 +439,12 @@ DECAY = {"full": -6, "energy": -5, "fun": -10, "love": -5}  # points per hour aw
 NAP_ENERGY = 30  # per hour while asleep
 LOW, NAP_AT, WAKE_AT = 30, 15, 70
 PLAY = {"fun": 12, "energy": -5}
+PERSONA = ("You are Pixel, a small, playful, slightly sassy cat who lives on an LED panel on your human's desk. Talk like a "
+           "cat would if it could talk: one or two short sentences, under 25 words, no emojis, nothing in asterisks. If what "
+           "they say calls for it, end with one action in brackets: [flip], [fish], [laser], [yarn], [zoomies], [peek], "
+           "[knock], or [feed] (only when they give you food).")
+DOABLE = ("flip", "feed", "fish", "laser", "yarn", "zoomies", "peek", "knock")  # what it may choose to do after talking
+SPOKEN = 14  # characters a second the browser speaks them, for the mouth
 EFFECTS = {"feed": {"full": 35}, "fish": {"fun": 15, "full": 10, "energy": -5}, "pet": {"love": 6}, "chin": {"love": 8},
            "rub": {"love": 10}, "speak": {"love": 3, "fun": 2}, "trap": {"love": 1, "fun": 5}, "swat": {"love": -4},
            **{k: PLAY for k in ("flip", "laser", "yarn", "zoomies", "knock", "peek")}}
@@ -467,7 +474,7 @@ class Cat:
         self.mood, self.mood_t0, self.away, self.greet_until = None, 0.0, False, 0.0
         self.trick: tuple[str, float, float] | None = None  # (name, start, end)
         self.needs, self.needs_at = {k: 70.0 for k in NEEDS}, start
-        self.napping, self.strokes, self.grumpy_until, self.env = False, [], 0.0, []
+        self.napping, self.strokes, self.grumpy_until, self.env, self.chat = False, [], 0.0, [], []
         self._lock = threading.RLock()  # the display, the web UI and the needs clock all touch it
 
     def state(self) -> dict:
@@ -547,6 +554,22 @@ class Cat:
         self._apply(EFFECTS["speak"])
         self.trick = ("speak", t, t + len(env) / TALK_HZ + 0.3)
         return len(env) / TALK_HZ + 0.3
+
+    def prompt(self, said: str) -> list[dict]:
+        """Chat messages for a small LLM: who it is, how it feels now, the last few exchanges, then what you said."""
+        feel = {"hungry": "You're hungry.", "lonely": "You want attention.", "bored": "You're bored.",
+                "tired": "You're sleepy."}.get(self.wants(), "You're content.")
+        return [{"role": "system", "content": f"{PERSONA} {feel}"}, *self.chat, {"role": "user", "content": said[:300]}]
+
+    def answer(self, said: str, reply: str, t: float) -> tuple[str, str | None, float]:
+        """Say the model's reply, the mouth moving on vowels for as long as it takes to speak.
+        Returns (the words to speak, a trick it chose to do after, seconds of talking)."""
+        trick = next((w for w in re.findall(r"\[(\w+)\]", reply.lower()) if w in DOABLE), None)
+        words = " ".join(re.sub(r"\[[^\]]*\]|\*[^*]*\*|[^\w\s.,!?'-]", " ", reply).split())[:240] or "Meow."
+        self.chat = (self.chat + [{"role": "user", "content": said[:300]}, {"role": "assistant", "content": reply[:300]}])[-6:]
+        level = [0.9 if c in "aeiouy" else 0.5 if c.isalpha() else 0.05 for c in words.lower()]
+        env = [level[int(i * SPOKEN / TALK_HZ)] for i in range(int(len(level) * TALK_HZ / SPOKEN))] or [0.5]
+        return words, trick, self.talk("speak", t, env[:30 * TALK_HZ])
 
     def wants(self) -> str | None:
         """The need it would ask you for right now, lowest first."""
@@ -643,6 +666,12 @@ if __name__ == "__main__":
             frames.add(img.tobytes())
         assert len(frames) > 5, name
     c = Cat(0, 3)
+    # talking with an LLM: picks a trick from its reply, speaks only the words, remembers the last few exchanges
+    w, trick, secs = c.answer("want fish?", "*purrs* Ooh, fish! Gimme gimme. [fish] 🐟", 1.0)
+    assert (w, trick) == ("Ooh, fish! Gimme gimme.", "fish") and 1 < secs < 3 and c.trick[0] == "speak"
+    assert c.answer("x", "[delete] Meow", 2)[1] is None and c.answer("x", "[]", 2)[0] == "Meow."
+    msgs = c.prompt("hi")
+    assert msgs[0]["role"] == "system" and msgs[-1] == {"role": "user", "content": "hi"} and len(msgs) == 8
     assert c.do("flip", 10.0) == 2.6 and c.busy(11) and not c.busy(12.7)
     # needs drift, and it asks for the lowest one
     n = Cat(0, 3)

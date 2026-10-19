@@ -439,10 +439,16 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
         </div>
         <p style="margin:0 0 10px" id="catMood">—</p>
         <div class="row"><div><label for="talkToggle">Talk to the cat</label>
-          <small>Say something and it says it back in a squeaky voice, Talking Tom style, through this computer's speakers.
-            Your voice stays in this tab; only how loud it is reaches the panel. Works while this tab is open.</small></div>
+          <small>Talk to it and it answers in a squeaky voice through this computer's speakers, and does a trick if
+            you ask. Your browser turns your words into text (on this computer when it can, otherwise through Google for
+            Chrome or Apple for Safari), and the text goes to an AI model on
+            <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a> for its reply.
+            Without a key it repeats what you say. Works while this tab is open.</small></div>
           <label class="switch"><input type="checkbox" id="talkToggle"><span></span></label></div>
-        <div class="meter" style="margin-bottom:14px"><i id="talkMeter"></i></div>
+        <div class="meter" style="margin-bottom:10px"><i id="talkMeter"></i></div>
+        <div class="inline" style="margin-bottom:14px"><input type="password" id="aiKey" autocomplete="off" aria-label="OpenRouter API key">
+          <input id="aiModel" aria-label="Model" placeholder="Model" spellcheck="false">
+          <button class="btn" id="aiSave">Save</button></div>
         <p class="sub">Tricks <span>play right away, even over other skins</span></p>
         <div class="chips" id="tricks"></div>
         <p class="empty">It has needs that drift through the day, even while this app is closed. When one runs low it asks:
@@ -643,6 +649,8 @@ function render() {
   $("applyWhat").innerHTML = ch.length ? `<b>${ch.length} unapplied</b> · ${ch.map((k) => LABELS[k]).join(", ")}` : "";
   $("previewBadge").textContent = ch.length ? "preview · not applied" : "matches display";
   $("previewBadge").classList.toggle("draft", ch.length > 0);
+  $("aiKey").placeholder = applied.cat_ai_key ? "OpenRouter key saved (paste to replace)" : "OpenRouter API key";
+  if (document.activeElement !== $("aiModel")) $("aiModel").value = applied.cat_ai_model;
   $("giphyKeyBox").hidden = !!applied.giphy_key; $("giphySearchBox").hidden = !applied.giphy_key;
 }
 
@@ -893,6 +901,15 @@ $("giphyKeySave").onclick = async () => {
     render(); if (applied.giphy_key) giphySearch();
   } catch (e) { toast(e.message, true); }
 };
+$("aiSave").onclick = async () => {
+  const patch = { cat_ai_model: $("aiModel").value.trim() };
+  if ($("aiKey").value.trim()) patch.cat_ai_key = $("aiKey").value.trim();
+  try {
+    const res = await api("/config", patch);
+    for (const k in patch) applied[k] = draft[k] = res[k];
+    $("aiKey").value = ""; render(); toast("Saved. Turn on Talk to the cat and say hi");
+  } catch (e) { toast(e.message, true); }
+};
 $("giphyKeyReset").onclick = () => { $("giphyKeyBox").hidden = false; };
 $("giphyGo").onclick = giphySearch;
 $("giphyQ").onkeydown = (e) => { if (e.key === "Enter") giphySearch(); };
@@ -979,11 +996,47 @@ document.querySelectorAll(".micToggle").forEach((t) => (t.onchange = async (e) =
   catch (err) { setMicToggles(false); toast("Microphone blocked: " + err.message, true); }
 }));
 
-// ---- Talking Tom: hears you, says it back squeaky. Audio stays in this tab; only loudness levels go to the panel.
+// ---- Talking Tom: hears you and answers squeaky. With speech recognition and a local AI it replies to what you
+// said (the browser speaks the AI's words); without, it plays your own voice back sped up. Only loudness and text leave this tab.
 const SQUEAK = 1.6;  // playback rate: higher and a little faster, like Talking Tom
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let talk = null;
 async function talkStart() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  let chat = !!SR, speaking = false, local = false, cur = null;
+  const lang = navigator.language || "en-US";
+  try {  // on-device recognition where the browser has it (newer Chrome), so your voice stays on this computer
+    const a = await SR.available({ langs: [lang], processLocally: true });
+    if (a === "available") local = true; else if (a === "downloadable") SR.install({ langs: [lang], processLocally: true });
+  } catch {}
+  const hear = () => {
+    if (!chat || speaking || cur || talk?.stream !== stream) return;
+    const r = cur = new SR();
+    Object.assign(r, { lang, continuous: true, processLocally: local });
+    r.onresult = (e) => {
+      const said = [...e.results].slice(e.resultIndex).filter((x) => x.isFinal).map((x) => x[0].transcript).join(" ").trim();
+      if (said) answer(r, said);
+    };
+    r.onerror = (e) => {
+      if (["not-allowed", "service-not-allowed", "language-not-supported", "network"].includes(e.error)) {
+        chat = false; toast("Can't turn speech into text here (" + e.error + "), so it repeats you instead", true);
+      }
+    };
+    r.onend = () => { cur = null; setTimeout(hear, 200); };  // recognition stops on its own after a while: keep listening
+    r.start();
+  };
+  const answer = async (r, said) => {
+    speaking = true; r.abort();  // don't hear its own voice
+    const done = () => { speaking = false; deaf = talk ? talk.ctx.currentTime + 0.4 : 0; hear(); };
+    try {
+      const { reply } = await api("/cat", { ask: said });
+      const u = Object.assign(new SpeechSynthesisUtterance(reply), { pitch: 1.9, rate: 1.1, lang });
+      u.onend = u.onerror = done;
+      deaf = Infinity; speechSynthesis.speak(u);
+    } catch (err) {
+      chat = false; done(); toast(err.message + ". Repeating you until then.", true);
+    }
+  };
   const ctx = new AudioContext(), sr = ctx.sampleRate, N = 2048;
   const node = ctx.createScriptProcessor(N, 1, 1);  // ponytail: deprecated but everywhere; AudioWorklet if it ever goes
   let pre = [], rec = null, voiced = 0, quiet = 0, deaf = 0, floor = 0.01;
@@ -1004,6 +1057,7 @@ async function talkStart() {
     if (quiet < 0.8 && rec.length * secs < 8) return;  // still talking (8 s max)
     const said = rec.slice(0, rec.length - Math.floor(0.6 / secs)); rec = null;
     if (voiced < 0.25 || !said.length) { api("/cat", { talk: "done" }).catch(() => {}); return; }  // a click, not words
+    if (chat) return;  // the words go to the AI instead (above)
     const buf = ctx.createBuffer(1, said.length * N, sr);
     said.forEach((c, i) => buf.copyToChannel(c, 0, i * N));
     const data = buf.getChannelData(0), step = Math.round(sr * SQUEAK / 20), env = [];
@@ -1019,10 +1073,11 @@ async function talkStart() {
   };
   ctx.createMediaStreamSource(stream).connect(node); node.connect(ctx.destination);  // outputs silence; must be connected to run
   talk = { stream, ctx };
+  hear();
 }
 $("talkToggle").onchange = async (e) => {
   if (!e.target.checked) {
-    if (talk) { talk.stream.getTracks().forEach((t) => t.stop()); talk.ctx.close(); talk = null; }
+    if (talk) { talk.stream.getTracks().forEach((t) => t.stop()); talk.ctx.close(); talk = null; speechSynthesis.cancel(); }
     $("talkMeter").style.width = "0"; return;
   }
   try { await talkStart(); toast("Say something to the cat"); }

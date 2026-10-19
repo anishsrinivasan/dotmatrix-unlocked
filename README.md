@@ -33,11 +33,15 @@ with a local web UI.
 **It reacts to you**
 - The cat has needs (food, energy, fun, love) and asks when one runs low. **Pet it** by stroking it in the web
   UI: head and chin get purrs, the belly is a trap until it trusts you, and too much petting earns a swat.
-- **Talk to the cat**, Talking Tom style: it listens, then repeats you in a squeaky voice with its mouth moving
-  on the panel. Your voice never leaves the browser tab.
+- **Talk to the cat**, Talking Tom style: it answers what you say in a squeaky voice, its mouth moving on the
+  panel, and does a trick if you ask ("can you do a flip?"). Replies come from an AI model on
+  [OpenRouter](https://openrouter.ai/keys): paste your key in the Cat card (Claude Haiku by default, any model id
+  works). Without a key, it repeats you back.
 - The cat naps when you're idle, waves when Claude Code needs your input, and dances to your music. Ask it to do
   a flip, feed it, or have it catch a fish.
 - The microphone (off by default, runs in your browser) drives the visualizer, and a clap startles the cat.
+  Talking to the cat uses your browser's speech recognition, which runs on your computer in newer Chrome and
+  otherwise goes through Google (Chrome) or Apple (Safari).
 - Claude Code hooks show when sessions are working or waiting on you, and can pull the dashboard up when Claude
   needs input.
 
@@ -102,7 +106,8 @@ service starts without anyone logging in.
   only 16 loudness levels are sent to the local service; no audio leaves the browser.
 - Network calls: Open-Meteo for weather and snapdata.dev for air quality (only once you set a city); snapdata.dev
   and Yahoo Finance for Markets (only while that skin is in use); lrclib.net
-  for Karaoke (the song's title and artist, only while that skin is in use); GIPHY if you add a key; and video links you paste.
+  for Karaoke (the song's title and artist, only while that skin is in use); OpenRouter for the cat's replies (the text of what
+  you said to it, only once you add a key); GIPHY if you add a key; and video links you paste.
 
 ## Command line
 
