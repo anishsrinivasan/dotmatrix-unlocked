@@ -475,6 +475,7 @@
         <h2>Background</h2>
         <div class="row"><div><label for="bgSwitch">Run in the background</label><small id="bgStatus">Keeps the panel going with no terminal open, and starts it when you log in</small></div>
           <label class="switch"><input type="checkbox" id="bgSwitch"><span></span></label></div>
+        <p class="empty" id="bgStop"></p>
       </section>
 
       <section class="card">
@@ -621,6 +622,9 @@ async function poll() {
       $("bgStatus").textContent = s.service ? "On: running in the background, starts when you log in."
         : s.service_installed ? "On: starts when you log in. This copy is running in a terminal."
         : "Off: stops when you close the terminal that started it.";
+      $("bgStop").innerHTML = s.service
+        ? "To stop: turn the switch off, or run <code>dotmatrix service uninstall</code> in a terminal. Start again with <code>dotmatrix</code>."
+        : "To stop: press <code>Ctrl+C</code> in the terminal running it." + (s.service_installed ? " To stop it starting at login: turn the switch off." : "");
     }
     playing = !!s.game;
     $("gameScore").textContent = s.game ? (s.game.title === $("gameTitle").textContent ? "" : s.game.title + " ") + `${s.game.over ? "game over" : "score"} · ${s.game.score}` : "not playing";

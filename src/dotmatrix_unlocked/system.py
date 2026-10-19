@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -184,6 +185,10 @@ def service_install() -> str:
 """)
         domain = f"gui/{os.getuid()}"
         subprocess.run(["launchctl", "bootout", f"{domain}/{LABEL}"], capture_output=True)
+        for _ in range(50):  # bootout returns before the old copy is gone; bootstrapping then fails with EIO
+            if _run(["launchctl", "print", f"{domain}/{LABEL}"]) is None:
+                break
+            time.sleep(0.1)
         subprocess.run(["launchctl", "bootstrap", domain, str(f)], check=True)
         return f"launchd agent {f}"
     if LINUX:
