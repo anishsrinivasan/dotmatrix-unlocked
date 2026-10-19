@@ -392,8 +392,17 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
           <button class="btn ghost" id="mkAdd">Add</button>
         </div>
         <div class="chips" id="mkStocks" style="margin-top:10px"></div>
-        <p class="empty">Green is up on the day, red is down. Gold, silver, USD → ₹, Nifty and Brent update daily
-          (IBJA, ECB via snapdata.dev); stocks every 5 minutes from Yahoo Finance. Fetched only while this skin is in use.</p>
+        <p class="sub" style="margin-top:16px">Show <span>"both" flips between price and change on each page</span></p>
+        <div class="chips" id="mkShow"></div>
+        <p class="sub" style="margin-top:16px">Change since</p>
+        <div class="chips" id="mkVs"></div>
+        <div class="inline" style="margin-top:8px">
+          <label for="mkDate" style="color:var(--muted)">or a date</label>
+          <input type="date" id="mkDate" min="2000-01-01" style="width:170px">
+        </div>
+        <p class="empty">Green is up, red is down, with a + or − in change mode. Gold, silver, USD → ₹, Nifty and Brent update daily
+          (IBJA, ECB via snapdata.dev); stocks every 5 minutes from Yahoo Finance. Fetched only while this skin is in use.
+          Nifty has no history yet, so it shows no change.</p>
       </section>
 
       <section class="card" id="catCard">
@@ -523,7 +532,7 @@ let applied = null, draft = null, library = [], lastCrc = null, draftUrl = null;
 const INFO = { album: "Album art has no settings. Shows the cover of what's playing, or the last cover seen.",
   vinyl: "Vinyl has no settings. The record spins with the album cover on its label; a default label when nothing plays." };
 let gamePick = "snake";  // live choice, not part of the draft
-const LABELS = { skin: "skin", gif: "GIF", vis_style: "visualizer style", layout: "modules", clock_24h: "clock format", anim_fps: "animation speed", page_secs: "page time", interrupt_on_input: "input override", brightness: "brightness", markets: "markets",
+const LABELS = { skin: "skin", gif: "GIF", vis_style: "visualizer style", layout: "modules", clock_24h: "clock format", anim_fps: "animation speed", page_secs: "page time", interrupt_on_input: "input override", brightness: "brightness", markets: "markets", markets_vs: "change since", markets_show: "markets display",
   gamma: "gamma", city: "city" };
 const DRAFT_KEYS = Object.keys(LABELS);
 
@@ -991,8 +1000,18 @@ function setMarkets(list) {
   if (list.length > 10) return toast("Up to 10 at a time. Remove one first.", true);
   edit({ markets: list, skin: "markets" });
 }
+const MK_SHOW = { price: "Price", change: "Change ±%", both: "Both" };
+const MK_VS = { prev: "Previous close", "7d": "1 week ago", "30d": "1 month ago" };
 function renderMarkets() {
   const cur = draft.markets || [];
+  const pick = (box, opts, key) => $(box).replaceChildren(...Object.entries(opts).map(([id, label]) => {
+    const b = document.createElement("button"); b.className = "chip pick" + (draft[key] === id ? " active" : "");
+    b.textContent = label; b.setAttribute("aria-pressed", draft[key] === id);
+    b.onclick = () => edit({ [key]: id, skin: "markets" }); return b;
+  }));
+  pick("mkShow", MK_SHOW, "markets_show"); pick("mkVs", MK_VS, "markets_vs");
+  const d = new Date(Date.now() - 864e5); $("mkDate").max = d.toISOString().slice(0, 10);
+  if (document.activeElement !== $("mkDate")) $("mkDate").value = MK_VS[draft.markets_vs] ? "" : draft.markets_vs;
   $("mkBuiltin").replaceChildren(...Object.entries(MK).map(([id, label]) => {
     const b = document.createElement("button"); b.className = "chip pick" + (cur.includes(id) ? " active" : "");
     b.textContent = label; b.setAttribute("aria-pressed", cur.includes(id));
@@ -1012,6 +1031,7 @@ function addTicker() {
   $("mkTicker").value = "";
 }
 $("mkAdd").onclick = addTicker;
+$("mkDate").onchange = (e) => { if (e.target.value) edit({ markets_vs: e.target.value, skin: "markets" }); };
 $("mkTicker").onkeydown = (e) => { if (e.key === "Enter") addTicker(); };
 
 async function loadVis() {

@@ -48,7 +48,7 @@ SKINS = ("dashboard", "album", "vinyl", "gif", "visualizer", "games", "video", "
 DEFAULTS = {**render.DEFAULT_CFG, "skin": "dashboard", "brightness": 80, "gamma": 2.2, "interrupt_on_input": True,
             "city": "", "lat": None, "lon": None, "gif": None, "giphy_key": "",
             "saved_skins": {}, "game": "snake", "vis_style": "bars",
-            "markets": ["GOLD", "SILVER", "USDINR", "AAPL", "NVDA"]}
+            "markets": ["GOLD", "SILVER", "USDINR", "AAPL", "NVDA"], "markets_vs": "prev", "markets_show": "both"}
 
 # Hook event -> session state. https://code.claude.com/docs/en/hooks
 INPUT_NOTIFICATIONS = {"permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"}
@@ -146,6 +146,12 @@ def validated(cfg: dict, patch: dict) -> dict:
             new[k] = _layout(v)
         elif k == "markets":
             new[k] = markets.valid(v)
+        elif k == "markets_vs":
+            new[k] = markets.valid_vs(v)
+        elif k == "markets_show":
+            if v not in markets.SHOWS:
+                raise ValueError(f"markets: show one of {markets.SHOWS}")
+            new[k] = v
         elif k == "saved_skins":
             if not isinstance(v, dict) or len(v) > 30:
                 raise ValueError("saved_skins: up to 30 named layouts")
@@ -198,14 +204,14 @@ class State:
         self.vis = skins.Visualizer()
         self.vis_draft = skins.Visualizer(seed=1)  # web preview animates on its own instance
         self.preview: tuple[str, bytes] = ("image/png", b"")
-        self.quotes: dict = {}  # markets id -> (value, change %)
-        self.markets_wanted = 0.0  # last time the markets skin was shown or previewed
+        self.quotes: dict = {}  # (markets id, compare-with) -> (value, change %)
+        self.markets_wanted = 0.0  # last time the markets skin was previewed
         self.markets_wake: asyncio.Event | None = None
-        self.markets_items: list[str] = []  # the draft's list while previewing
+        self.markets_draft: tuple[list[str], str] = ([], "prev")  # what the preview shows
         self._gifs: dict[str, tuple[str, bytes, bytes]] = {}  # key -> (key, preview gif, gamma-corrected gif)
 
-    def want_markets(self, items: list[str]) -> None:
-        self.markets_wanted, self.markets_items = time.time(), items
+    def want_markets(self, items: list[str], vs: str) -> None:
+        self.markets_wanted, self.markets_draft = time.time(), (items, vs)
         if self.markets_wake:
             self.loop.call_soon_threadsafe(self.markets_wake.set)
 
@@ -281,7 +287,8 @@ class State:
             return "visualizer", "frame", (self.vis_draft.frame(now, True, cfg["vis_style"]) if draft
                                             else self.vis.frame(now, bool(music), cfg["vis_style"], self.mic.bands if self.mic.live else None))
         if skin == "markets":
-            return "markets", "frame", markets.frame(cfg["markets"], self.quotes, now, cfg["page_secs"])
+            quotes = {i: q for (i, vs), q in self.quotes.items() if vs == cfg["markets_vs"]}
+            return "markets", "frame", markets.frame(cfg["markets"], quotes, now, cfg["page_secs"], cfg["markets_show"])
         if skin == "album":
             art = (music and music["art"]) or self.last_art
             return "album", "frame", skins.album(art) if art else skins.nothing_playing()
@@ -533,7 +540,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/render":
                 draft = validated(state.cfg, {k: v for k, v in body.items() if k not in ("city", "giphy_key", "thumb")})
                 if draft["skin"] == "markets" and not body.get("thumb"):  # previewing it: fetch quotes now
-                    state.want_markets(draft["markets"])
+                    state.want_markets(draft["markets"], draft["markets_vs"])
                 _, kind, payload = state.output(draft)
                 if kind == "gif":
                     return self._send(200, payload[1], "image/gif")
@@ -606,20 +613,26 @@ async def weather_loop() -> None:
 async def markets_loop() -> None:
     """Quotes for the markets skin, only while it's applied or being previewed (no calls otherwise)."""
     state.markets_wake = asyncio.Event()
-    fetched, have = 0.0, set()
+    fetched: dict[tuple[str, str], float] = {}  # (id, compare-with) -> when
+    retry_at = 0.0
     while True:
         cfg, now = state.cfg, time.time()
+        wants = [state.markets_draft] if now - state.markets_wanted < 120 else []
         if cfg["skin"] == "markets":
-            state.markets_wanted = now
-        items = list(dict.fromkeys((cfg["markets"] if cfg["skin"] == "markets" else []) + state.markets_items))
-        if now - state.markets_wanted < 120 and (now - fetched > MARKETS_EVERY or not set(items) <= have):
+            wants.append((cfg["markets"], cfg["markets_vs"]))
+        for items, vs in wants if now >= retry_at else []:
+            due = [i for i in items if now - fetched.get((i, vs), 0) > MARKETS_EVERY]
+            if not due:
+                continue
             try:
-                state.quotes.update(await asyncio.to_thread(markets.fetch, items))
-                fetched, have = now, set(items)
-                log.info("markets: %d quotes", len(state.quotes))
+                got = await asyncio.to_thread(markets.fetch, due, vs)
+                state.quotes.update({(i, vs): q for i, q in got.items()})
+                fetched.update({(i, vs): now for i in due})
+                log.info("markets: %d of %d quotes (vs %s)", len(got), len(due), vs)
             except Exception as e:
                 log.warning("markets fetch failed: %s", e)
-                fetched = now - MARKETS_EVERY + 60
+                retry_at = now + 60  # previews keep waking us; don't hammer a failing source
+                break
         try:
             await asyncio.wait_for(state.markets_wake.wait(), 30)
         except TimeoutError:

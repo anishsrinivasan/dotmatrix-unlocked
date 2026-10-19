@@ -13,7 +13,11 @@ jobs:
       - run: uv build
       - uses: actions/upload-artifact@v4
         with: { name: dist, path: dist/ }
-      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="${GITHUB_REF_NAME#v}" '/^## /{p = ($2 == v); next} p' CHANGELOG.md > notes.md
+          if [ -s notes.md ]; then flag="--notes-file notes.md"; else flag="--generate-notes"; fi
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" $flag
         env: { GH_TOKEN: "${{ github.token }}" }
   pypi:
     # Turn on once PyPI has this repo as a trusted publisher: gh variable set PUBLISH_PYPI --body true

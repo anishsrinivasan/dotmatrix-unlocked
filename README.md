@@ -16,8 +16,9 @@ with a local web UI.
   pick fonts and colours, then save your own layouts.
 - **Skins:** album art, a spinning vinyl, GIFs, a Winamp-style **visualizer** (7 styles), a mischievous pixel
   **cat**, and **Markets**.
-- **Markets:** pick what to track: gold (24K/22K per gram), silver per kg, USD → ₹, Nifty 50, Nifty Bank, Brent,
-  and any US stock ticker. Green when it's up on the day, red when it's down. Free, no API keys.
+- **Markets:** pick what to track: gold (24K/22K per gram), silver per kg, the rupee against USD, EUR, GBP, AED,
+  SGD and JPY, Nifty 50, Nifty Bank, Brent, and any US stock ticker. Show the price, the change (+/−%), or both,
+  since the previous close, a week or a month ago, or any date you pick. Free, no API keys.
 - **GIF library:** 16 built-in animations, GIPHY search, or upload your own. GIFs are re-tuned for LEDs, with
   sharper shrinking, a contrast stretch and no dither noise.
 
@@ -122,6 +123,10 @@ uv run dotmatrix run --fake
 - Add a **visualizer style** (`skins.py`) or a **cat trick** (`cat.py`): same idea.
 
 The web UI picks all of these up automatically.
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md). Each GitHub release carries its section.
 
 ## License
 

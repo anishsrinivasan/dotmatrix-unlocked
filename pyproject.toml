@@ -1,6 +1,6 @@
 [project]
 name = "dotmatrix-unlocked"
-version = "0.1.4"
+version = "0.1.5"
 description = "Drive an iDotMatrix-compatible 32x32 LED panel from your computer: dashboard, Claude Code activity, music, visualizer, games and a mischievous cat."
 readme = "README.md"
 license = "GPL-3.0-or-later"
@@ -17,6 +17,7 @@ dependencies = [
     "bleak>=0.22",
     "idotmatrix>=0.0.9",
     "pillow>=10",
+    "truststore>=0.10",  # HTTPS via the OS certificate store (python.org builds ship without one)
     "winrt-Windows.Media.Control>=2.0; sys_platform == 'win32'",
     "winrt-Windows.Foundation>=2.0; sys_platform == 'win32'",
 ]

@@ -132,6 +132,8 @@ def background(port: int) -> None:
 
 
 def main() -> None:
+    import truststore
+    truststore.inject_into_ssl()  # weather, markets, GIPHY: trust what the OS trusts
     p = argparse.ArgumentParser(prog="dotmatrix", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--port", type=int, default=PORT)
     p.add_argument("--address", help="panel Bluetooth address (default: the paired one)")
