@@ -33,6 +33,8 @@ with a local web UI.
 **It reacts to you**
 - The cat has needs (food, energy, fun, love) and asks when one runs low. **Pet it** by stroking it in the web
   UI: head and chin get purrs, the belly is a trap until it trusts you, and too much petting earns a swat.
+- **Talk to the cat**, Talking Tom style: it listens, then repeats you in a squeaky voice with its mouth moving
+  on the panel. Your voice never leaves the browser tab.
 - The cat naps when you're idle, waves when Claude Code needs your input, and dances to your music. Ask it to do
   a flip, feed it, or have it catch a fish.
 - The microphone (off by default, runs in your browser) drives the visualizer, and a clap startles the cat.

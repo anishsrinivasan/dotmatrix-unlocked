@@ -95,10 +95,16 @@ def test_fake_device_end_to_end(tmp_path):
         with pytest.raises(urllib.error.HTTPError) as e:
             call("/cat", {"pet": "tail"})
         assert e.value.code == 400
+        assert json.loads(call("/cat", {"talk": "listen"})[1])["did"] == "listen"
+        assert json.loads(call("/cat", {"talk": "speak", "env": [0.2, 0.9, 0.5] * 10})[1])["secs"] > 1
+        assert json.loads(call("/status")[1])["cat"]["doing"] == "speak"
+        with pytest.raises(urllib.error.HTTPError) as e:
+            call("/cat", {"talk": "speak", "env": "loud"})
+        assert e.value.code == 400
         code, png = call("/cat/view")
         assert code == 200 and png[:4] == b"\x89PNG"
         cat = json.loads(call("/status")[1])["cat"]
-        assert set(cat["needs"]) == {"full", "energy", "fun", "love"} and cat["doing"] == "feed"
+        assert set(cat["needs"]) == {"full", "energy", "fun", "love"} and cat["doing"] == "speak"
         for _ in range(20):
             if list(tmp_path.rglob("cat.json")):
                 break

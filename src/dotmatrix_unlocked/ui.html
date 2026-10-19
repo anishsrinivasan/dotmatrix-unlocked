@@ -438,6 +438,11 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
           </div>
         </div>
         <p style="margin:0 0 10px" id="catMood">—</p>
+        <div class="row"><div><label for="talkToggle">Talk to the cat</label>
+          <small>Say something and it says it back in a squeaky voice, Talking Tom style, through this computer's speakers.
+            Your voice stays in this tab; only how loud it is reaches the panel. Works while this tab is open.</small></div>
+          <label class="switch"><input type="checkbox" id="talkToggle"><span></span></label></div>
+        <div class="meter" style="margin-bottom:14px"><i id="talkMeter"></i></div>
         <p class="sub">Tricks <span>play right away, even over other skins</span></p>
         <div class="chips" id="tricks"></div>
         <p class="empty">It has needs that drift through the day, even while this app is closed. When one runs low it asks:
@@ -974,6 +979,56 @@ document.querySelectorAll(".micToggle").forEach((t) => (t.onchange = async (e) =
   catch (err) { setMicToggles(false); toast("Microphone blocked: " + err.message, true); }
 }));
 
+// ---- Talking Tom: hears you, says it back squeaky. Audio stays in this tab; only loudness levels go to the panel.
+const SQUEAK = 1.6;  // playback rate: higher and a little faster, like Talking Tom
+let talk = null;
+async function talkStart() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+  const ctx = new AudioContext(), sr = ctx.sampleRate, N = 2048;
+  const node = ctx.createScriptProcessor(N, 1, 1);  // ponytail: deprecated but everywhere; AudioWorklet if it ever goes
+  let pre = [], rec = null, voiced = 0, quiet = 0, deaf = 0, floor = 0.01;
+  node.onaudioprocess = (e) => {
+    const x = e.inputBuffer.getChannelData(0), secs = N / sr;
+    let sum = 0; for (let i = 0; i < x.length; i++) sum += x[i] * x[i];
+    const rms = Math.sqrt(sum / x.length), loud = rms > Math.max(0.015, floor * 4);
+    $("talkMeter").style.width = Math.min(100, rms * 400) + "%";
+    if (ctx.currentTime < deaf) return;  // it's talking: don't hear itself
+    if (!rec) {
+      if (!loud) floor = floor * 0.95 + rms * 0.05;  // room noise, so a fan doesn't count as talking
+      pre.push(new Float32Array(x)); if (pre.length > 0.3 / secs) pre.shift();  // keep the first syllable
+      if (loud) { rec = pre; pre = []; voiced = quiet = 0; api("/cat", { talk: "listen" }).catch(() => {}); }
+      return;
+    }
+    rec.push(new Float32Array(x));
+    voiced += loud ? secs : 0; quiet = loud ? 0 : quiet + secs;
+    if (quiet < 0.8 && rec.length * secs < 8) return;  // still talking (8 s max)
+    const said = rec.slice(0, rec.length - Math.floor(0.6 / secs)); rec = null;
+    if (voiced < 0.25 || !said.length) { api("/cat", { talk: "done" }).catch(() => {}); return; }  // a click, not words
+    const buf = ctx.createBuffer(1, said.length * N, sr);
+    said.forEach((c, i) => buf.copyToChannel(c, 0, i * N));
+    const data = buf.getChannelData(0), step = Math.round(sr * SQUEAK / 20), env = [];
+    for (let i = 0; i < data.length; i += step) {
+      let m = 0; for (let k = i; k < Math.min(i + step, data.length); k++) m += data[k] * data[k];
+      env.push(Math.sqrt(m / step));
+    }
+    const peak = Math.max(...env) || 1;
+    const play = Object.assign(ctx.createBufferSource(), { buffer: buf });
+    play.playbackRate.value = SQUEAK; play.connect(ctx.destination); play.start();
+    deaf = ctx.currentTime + buf.duration / SQUEAK + 0.4;
+    api("/cat", { talk: "speak", env: env.slice(0, 600).map((v) => +(v / peak).toFixed(2)) }).catch(() => {});
+  };
+  ctx.createMediaStreamSource(stream).connect(node); node.connect(ctx.destination);  // outputs silence; must be connected to run
+  talk = { stream, ctx };
+}
+$("talkToggle").onchange = async (e) => {
+  if (!e.target.checked) {
+    if (talk) { talk.stream.getTracks().forEach((t) => t.stop()); talk.ctx.close(); talk = null; }
+    $("talkMeter").style.width = "0"; return;
+  }
+  try { await talkStart(); toast("Say something to the cat"); }
+  catch (err) { e.target.checked = false; toast("Microphone blocked: " + err.message, true); }
+};
+
 // ---- LED glow: a blurred copy of the preview blooms into the gaps between dots
 new MutationObserver(() => (document.querySelector(".bloom").src = $("draftPreview").src))
   .observe($("draftPreview"), { attributes: true, attributeFilter: ["src"] });
@@ -1025,7 +1080,7 @@ $("scanBtn").onclick = async () => {
 // ---- the cat: live view you can stroke, and its needs
 const NEED_LABEL = { full: ["Food", "#f0506e"], energy: ["Energy", "#ffc23d"], fun: ["Fun", "#4cc9ff"], love: ["Love", "#ff7ac0"] };
 const SAYS = { pet: "Purring.", chin: "Loves a chin scratch.", rub: "It trusts you: belly rubs!", trap: "Got you! The belly was a trap.",
-  swat: "Hiss! That was too much petting.", grumpy: "Still grumpy. Give it a moment.", refuse: "Too full for another treat." };
+  swat: "Hiss! That was too much petting.", listen: "Listening…", speak: "Talking back.", grumpy: "Still grumpy. Give it a moment.", refuse: "Too full for another treat." };
 const WANT = { hungry: "Hungry. Feed it a treat.", lonely: "Lonely. Pet it.", bored: "Bored. Play a game with it.", tired: "Napping. Let it sleep, or wake it with a treat." };
 let catSaid = 0;
 function renderCat(c) {

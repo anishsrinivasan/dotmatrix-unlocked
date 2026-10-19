@@ -41,8 +41,9 @@ def _put(px, x, y, c):
         px[x, y] = c
 
 
-def draw_cat(img, x, y, eyes="open", look=(0, 0), tail=0, paw=None):
-    """eyes: open | closed | smug. look: (-1..1, -1..0). paw: None | 'left' | 'right' (raised)."""
+def draw_cat(img, x, y, eyes="open", look=(0, 0), tail=0, paw=None, mouth=0):
+    """eyes: open | closed | smug. look: (-1..1, -1..0). paw: None | 'left' | 'right' (raised).
+    mouth: 0 closed, 1 ajar, 2 wide open (talking)."""
     px = img.load()
     for i, (tx, ty) in enumerate(TAIL[tail % 2]):
         _put(px, x + tx, y + ty, PAL["D"] if i == len(TAIL[0]) - 1 else PAL["O"])
@@ -65,6 +66,10 @@ def draw_cat(img, x, y, eyes="open", look=(0, 0), tail=0, paw=None):
             else:  # smug: heavy lid
                 for dx in range(3):
                     _put(px, x + ex + dx, top - 1, PAL["D"])
+    if mouth:  # under the nose; wide open shows a tongue
+        for mx, my in ([(6, 8)] if mouth == 1 else [(5, 8), (6, 8), (7, 8), (5, 9), (7, 9)]):
+            _put(px, x + mx, y + my, PAL["K"])
+        _put(px, x + 6, y + 9, PAL["P"] if mouth == 2 else PAL["K"])
     if paw:
         px0 = x - 2 if paw == "left" else x + 13
         for dx in (0, 1):
@@ -366,6 +371,31 @@ def _act_refuse(img, u, r):  # already full: sniffs the treat and turns away
     draw_cat(img, 7 - min(3, int(u * 3)), 16, _blink(u * 3) if u < 1 else "smug", (-1, 0), tail=int(u * 4))
 
 
+# ---- Talking Tom: the browser hears you, the cat says it back (squeaky) through your speakers
+def _act_listen(img, u, r):  # ears up, leaning in, sound waves coming in from the side
+    px = img.load()
+    for k in range(3):
+        p = (u * 1.2 + k / 3) % 1
+        x = 2 + round(p * 5)
+        for dy in range(-k - 1, k + 2):
+            _put(px, x - abs(dy) // 2, 18 + dy, tuple(int(v * (1 - p * 0.7)) for v in (120, 200, 255)))
+    draw_cat(img, 11, 16, "open", (-1, 0), tail=int(u * 2))
+    _bubble(img, "?" if int(u * 2) % 2 else " ? ", (120, 200, 255))  # all ears
+
+
+def _act_speak(img, u, env):  # mouth follows the loudness of the playback; env = levels 0..1 at TALK_HZ
+    lvl = env[min(int(u * TALK_HZ), len(env) - 1)] if env else 0
+    mouth = 2 if lvl > 0.55 else 1 if lvl > 0.15 else 0
+    draw_cat(img, 9, 16 - (mouth == 2), "open" if lvl > 0.05 else _blink(u), (0, 0), tail=int(u * 6), mouth=mouth)
+    for k in range(round(lvl * 3)):  # sound lines out of the mouth
+        _put(img.load(), 22 + k * 2, 20 - k, (255, 230, 120))
+        _put(img.load(), 22 + k * 2, 26 + k, (255, 230, 120))
+
+
+TALK_HZ = 20  # loudness levels per second the browser sends with a reply
+LISTEN_SECS = 10  # listening pose holds this long unless the reply (or silence) comes first
+
+
 # ---- needs: what it asks for when one runs low
 def _act_hungry(img, u, r):  # by the empty bowl, looks at it, looks at you
     px = img.load()
@@ -397,7 +427,7 @@ def _act_bored(img, u, r):  # nudges its yarn ball, sighs
 
 TRICKS = {"flip": (_act_flip, 2.6), "feed": (_act_feed, 4), "fish": (_act_fish, 5), "pet": (_act_pet, 4),
           "chin": (_act_chin, 3), "rub": (_act_rub, 3), "trap": (_act_trap, 2.6), "swat": (_act_swat, 2.5),
-          "refuse": (_act_refuse, 2.5)}
+          "refuse": (_act_refuse, 2.5), "listen": (_act_listen, LISTEN_SECS), "speak": (_act_speak, 0)}
 TRICK_LABELS = {"flip": "Do a flip", "feed": "Feed a treat", "fish": "Catch a fish", "pet": "Pet", "laser": "Laser pointer",
                 "yarn": "Throw yarn", "knock": "Mug on a shelf…", "zoomies": "Zoomies", "peek": "Hide & seek"}
 
@@ -409,7 +439,7 @@ NAP_ENERGY = 30  # per hour while asleep
 LOW, NAP_AT, WAKE_AT = 30, 15, 70
 PLAY = {"fun": 12, "energy": -5}
 EFFECTS = {"feed": {"full": 35}, "fish": {"fun": 15, "full": 10, "energy": -5}, "pet": {"love": 6}, "chin": {"love": 8},
-           "rub": {"love": 10}, "trap": {"love": 1, "fun": 5}, "swat": {"love": -4},
+           "rub": {"love": 10}, "speak": {"love": 3, "fun": 2}, "trap": {"love": 1, "fun": 5}, "swat": {"love": -4},
            **{k: PLAY for k in ("flip", "laser", "yarn", "zoomies", "knock", "peek")}}
 OVERPET = 14  # strokes within 20 s before it has had enough
 AWAY_SECS = 300  # no keyboard/mouse this long = you're away; cat naps
@@ -437,7 +467,7 @@ class Cat:
         self.mood, self.mood_t0, self.away, self.greet_until = None, 0.0, False, 0.0
         self.trick: tuple[str, float, float] | None = None  # (name, start, end)
         self.needs, self.needs_at = {k: 70.0 for k in NEEDS}, start
-        self.napping, self.strokes, self.grumpy_until = False, [], 0.0
+        self.napping, self.strokes, self.grumpy_until, self.env = False, [], 0.0, []
         self._lock = threading.RLock()  # the display, the web UI and the needs clock all touch it
 
     def state(self) -> dict:
@@ -502,6 +532,22 @@ class Cat:
         self.napping = False
         return name, self._start(name, t, extend=True)
 
+    def talk(self, mode: str, t: float, env: list | None = None) -> float:
+        """mode: listen (you're talking) | speak (playing it back; env = loudness per 1/TALK_HZ s) | done."""
+        if mode == "done":
+            if self.trick and self.trick[0] in ("listen", "speak"):
+                self.trick = None
+            return 0.0
+        if mode == "listen":
+            self.napping = False
+            return self._start("listen", t, extend=True)
+        if mode != "speak" or not isinstance(env, list) or not 0 < len(env) <= 30 * TALK_HZ:
+            raise ValueError("talk: listen | speak with env (up to 30 s of levels) | done")
+        self.env = [max(0.0, min(1.0, float(v))) for v in env]
+        self._apply(EFFECTS["speak"])
+        self.trick = ("speak", t, t + len(env) / TALK_HZ + 0.3)
+        return len(env) / TALK_HZ + 0.3
+
     def wants(self) -> str | None:
         """The need it would ask you for right now, lowest first."""
         if self.napping:
@@ -553,7 +599,7 @@ class Cat:
         img = render.blank()
         if self.busy(t):  # asked for: beats every mood
             fn, _ = TRICKS.get(self.trick[0]) or ACTS[self.trick[0]]
-            fn(img, t - self.trick[1], random.Random(1))
+            fn(img, t - self.trick[1], self.env if fn is _act_speak else random.Random(1))
             return img
         mood = self._mood(t, ctx)
         if mood != self.mood:
@@ -588,6 +634,8 @@ if __name__ == "__main__":
     m = Cat(0, 3)
     ctx = {"idle": 0, "claude": [], "music": False, "hour": 14}
     for name, (fn, dur) in TRICKS.items():
+        if name == "speak":
+            continue  # driven by the browser's levels; checked below
         frames = set()
         for k in range(int(dur * FPS)):
             img = render.blank()
@@ -630,6 +678,22 @@ if __name__ == "__main__":
     for k in range(OVERPET):
         p.pet("head", 15 + k * 0.5)
     assert p.trick[0] == "swat" and p.pet("head", 23)[0] == "grumpy" and p.pet("head", 30)[0] == "pet"
+    # talking: listen pose holds while you speak, the mouth follows the reply's loudness, then back to normal
+    tk = Cat(0, 3)
+    assert tk.talk("listen", 1.0) == LISTEN_SECS and tk.busy(5) and tk.trick[0] == "listen"
+    env = [0.0, 0.3, 1.0, 1.0, 0.3, 0.0] * 4
+    assert abs(tk.talk("speak", 6.0, env) - (len(env) / TALK_HZ + 0.3)) < 1e-9 and tk.trick[0] == "speak"
+    mouths = {tk.frame(6.0 + k / 8).crop((14, 24, 18, 26)).tobytes() for k in range(8)}
+    assert len(mouths) >= 2  # opens and closes
+    assert not tk.busy(6.0 + len(env) / TALK_HZ + 0.5)
+    tk.talk("listen", 20.0); tk.talk("done", 21.0)
+    assert not tk.busy(21.5)
+    for bad in (("speak", None), ("speak", [0.1] * 10 ** 4), ("shout", [1.0])):
+        try:
+            tk.talk(bad[0], 0, bad[1])
+            raise AssertionError(bad)
+        except ValueError:
+            pass
     q = Cat(0, 3)
     q.load({"needs": {"full": 5, "bogus": 1}, "at": 123.0})
     assert q.needs["full"] == 5 and q.needs_at == 123.0 and "bogus" not in q.state()["needs"]

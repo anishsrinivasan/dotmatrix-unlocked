@@ -2,6 +2,13 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.9 · 2026-10-19
+
+### Added
+- **Talk to the cat**, Talking Tom style: turn it on in the Cat card and say something. The cat perks up its ears
+  while you talk, then says it back in a squeaky voice through your computer's speakers, its mouth moving on the
+  panel in time with the words. Your voice stays in the browser tab; only loudness levels reach the panel.
+
 ## 0.1.8 · 2026-10-19
 
 ### Added

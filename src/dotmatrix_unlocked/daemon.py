@@ -484,9 +484,11 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/event":
                 self.loop.call_soon_threadsafe(state.event, body)
                 return self._send(204)  # empty body: Claude Code treats it as a no-op hook
-            if self.path == "/cat":  # a trick, or one stroke of petting: {"do": trick} | {"pet": head|chin|belly}
+            if self.path == "/cat":  # {"do": trick} | {"pet": head|chin|belly} | {"talk": listen|speak|done, "env"?}
                 now = time.time()
-                if "pet" in body:
+                if "talk" in body:
+                    did, dur = str(body["talk"]), state.cat.talk(str(body["talk"]), now, body.get("env"))
+                elif "pet" in body:
                     did, dur = state.cat.pet(str(body["pet"]), now)
                 else:
                     did, dur = str(body.get("do")), state.cat.do(str(body.get("do")), now)
