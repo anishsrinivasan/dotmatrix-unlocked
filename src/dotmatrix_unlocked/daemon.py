@@ -30,7 +30,7 @@ from . import system
 from . import video
 PORT = int(os.environ.get("DOTMATRIX_PORT", "7766"))
 HOME = system.config_dir()
-CONFIG_FILE, GIF_DIR = HOME / "config.json", HOME / "gifs"
+CONFIG_FILE, GIF_DIR, CAT_FILE = HOME / "config.json", HOME / "gifs", HOME / "cat.json"
 UI_FILE = Path(__file__).with_name("ui.html")
 
 WEATHER_EVERY, WEATHER_STALE = 15 * 60, 60 * 60
@@ -200,6 +200,10 @@ class State:
         self.video: video.Player | None = None
         self.video_error: str | None = None
         self.cat, self.cat_draft = cat.Cat(time.time(), seed=int(time.time())), cat.Cat(time.time(), seed=1)
+        try:  # its needs survive restarts (and keep drifting while we're off)
+            self.cat.load(json.loads(CAT_FILE.read_text()))
+        except (OSError, ValueError):
+            pass
         self.timer: dict | None = None
         self.cat_until = 0.0  # a requested trick shows the cat over other skins until then
         self.mic = mic.Mic()
@@ -219,6 +223,10 @@ class State:
         self.markets_wanted, self.markets_draft = time.time(), (items, vs)
         if self.markets_wake:
             self.loop.call_soon_threadsafe(self.markets_wake.set)
+
+    def cat_ctx(self, clap: bool = False) -> dict:
+        states = [v["state"] for v in self.sessions.values()]
+        return {"idle": self.idle, "claude": states, "music": bool(self.music), "hour": datetime.now().hour, "clap": clap}
 
     def event(self, ev: dict) -> None:
         sid, name = ev.get("session_id"), ev.get("hook_event_name")
@@ -281,9 +289,7 @@ class State:
         if tm:
             return "timer", "frame", render.timer(tm["end"] - now, tm["total"], tm["label"], now)
         if skin == "cat":
-            ctx = {"idle": self.idle, "claude": states, "music": bool(music), "hour": dt.hour,
-                   "clap": self.mic.clapped()}
-            return "cat", "frame", (self.cat_draft if draft else self.cat).frame(now, ctx)
+            return "cat", "frame", (self.cat_draft if draft else self.cat).frame(now, self.cat_ctx(self.mic.clapped()))
         if skin == "video":
             return "video", "frame", skins.video_idle()
         if skin == "games":
@@ -410,6 +416,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, {**state.cfg, "giphy_key": bool(state.cfg["giphy_key"])})  # never echo the key
         if path == "/presets":
             return self._json(200, list(skins.PRESETS))
+        if path == "/cat/view":  # the real cat, live, for petting in the web UI
+            buf = io.BytesIO()
+            state.cat.frame(time.time(), state.cat_ctx()).save(buf, format="PNG")
+            return self._send(200, buf.getvalue(), "image/png")
         if path == "/cat/tricks":
             return self._json(200, cat.TRICK_LABELS)
         if path == "/markets":
@@ -455,6 +465,8 @@ class Handler(BaseHTTPRequestHandler):
                 "timer": (tm := state.timer) and {"remaining": max(0, round(tm["end"] - now)), "total": tm["total"],
                                                   "label": tm["label"]},
                 "idle": round(state.idle), "cat_mood": state.cat.mood,
+                "cat": {**state.cat.state(), "wants": state.cat.wants(),
+                        "doing": state.cat.trick[0] if state.cat.busy(now) else None},
                 "mic": state.mic.live,
                 "game": state.game and {"title": state.game.title, "score": state.game.score, "over": state.game.over},
             })
@@ -472,10 +484,14 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/event":
                 self.loop.call_soon_threadsafe(state.event, body)
                 return self._send(204)  # empty body: Claude Code treats it as a no-op hook
-            if self.path == "/cat":  # trick on demand
-                dur = state.cat.do(str(body.get("do")), time.time())
-                state.cat_until = time.time() + dur
-                return self._json(200, {"ok": True, "secs": dur})
+            if self.path == "/cat":  # a trick, or one stroke of petting: {"do": trick} | {"pet": head|chin|belly}
+                now = time.time()
+                if "pet" in body:
+                    did, dur = state.cat.pet(str(body["pet"]), now)
+                else:
+                    did, dur = str(body.get("do")), state.cat.do(str(body.get("do")), now)
+                state.cat_until = max(state.cat_until, now + dur)
+                return self._json(200, {"ok": True, "did": did, "secs": dur, "needs": state.cat.state()["needs"]})
             if self.path == "/setup/scan":  # first-run pairing from the web UI
                 found = asyncio.run_coroutine_threadsafe(device.scan(6), self.loop).result(20)
                 return self._json(200, [{"address": a, "name": n} for a, n in found])
@@ -655,12 +671,22 @@ async def markets_loop() -> None:
 
 async def idle_loop() -> None:
     """Seconds since keyboard/mouse input (no permission needed); the cat naps when you're away."""
+    saved, n = None, -1
     while True:
+        n += 1
         try:
             idle = await asyncio.to_thread(system.idle_seconds)
             state.idle = idle if idle is not None else 0.0
         except Exception as e:
             log.debug("idle: %s", e)
+        if n % 30 == 0:  # every minute: needs drift even when the cat isn't on screen; save them
+            state.cat.tick(time.time(), state.cat.mood in ("sleep", "tired") or state.cat.napping)
+            if (cur := json.dumps(state.cat.state()["needs"])) != saved:
+                try:
+                    CAT_FILE.write_text(json.dumps(state.cat.state()))
+                    saved = cur
+                except OSError as e:
+                    log.warning("couldn't save the cat: %s", e)
         await asyncio.sleep(2)
 
 

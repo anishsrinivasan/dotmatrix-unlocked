@@ -31,6 +31,8 @@ with a local web UI.
 - **Countdown timer** that shows over any skin, plus quick text or image messages.
 
 **It reacts to you**
+- The cat has needs (food, energy, fun, love) and asks when one runs low. **Pet it** by stroking it in the web
+  UI: head and chin get purrs, the belly is a trap until it trusts you, and too much petting earns a swat.
 - The cat naps when you're idle, waves when Claude Code needs your input, and dances to your music. Ask it to do
   a flip, feed it, or have it catch a fish.
 - The microphone (off by default, runs in your browser) drives the visualizer, and a clap startles the cat.

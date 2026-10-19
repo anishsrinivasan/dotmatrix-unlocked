@@ -2,6 +2,17 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.8 · 2026-10-19
+
+### Added
+- The cat has needs: food, energy, fun and love. They drift through the day (even while the app is closed) and are
+  saved between restarts. When one runs low it asks for it: waits by its bowl ("FEED?"), wants to play ("PLAY?"),
+  wants petting ("PET?"), or naps until it has its energy back.
+- Pet the cat: stroke it with your mouse or finger on its live view in the Cat card. Head and chin get purrs and
+  hearts; the belly is a trap until it trusts you (then belly rubs); too much petting earns a hiss and a swat.
+- Treats fill it up (it refuses when full), games and tricks cheer it up and use up energy. Its needs show as bars
+  in the Cat card, with what it wants right now.
+
 ## 0.1.7 · 2026-10-19
 
 ### Changed

@@ -218,6 +218,16 @@
   /* ---- microphone */
   .row.mic { margin-top: 12px; border-top: 1px solid var(--edge); padding-top: 12px; }
   .meter { height: 4px; background: #0f0d13; border-radius: 99px; overflow: hidden; margin: 6px 0 0; }
+  .pet { display: grid; grid-template-columns: 168px 1fr; gap: 16px; align-items: center; margin: 0 0 14px; }
+  .pet .led { cursor: grab; touch-action: none; box-shadow: 0 0 0 5px #0c0a10, 0 0 0 6px var(--edge); }
+  .pet .led:active { cursor: grabbing; }
+  .needs { display: grid; gap: 7px; margin-top: 10px; }
+  .needs > div { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .needs .meter { margin: 0; height: 6px; }
+  .needs .low i { animation: needpulse 1.2s ease-in-out infinite; }
+  @keyframes needpulse { 50% { opacity: .35; } }
+  @media (max-width: 520px) { .pet { grid-template-columns: 120px 1fr; } }
+  @media (prefers-reduced-motion: reduce) { .needs .low i { animation: none; } }
   .meter i { display: block; height: 100%; width: 0; background: var(--mint); box-shadow: 0 0 8px var(--mint); transition: width .05s; }
   .setup { border-color: #6a4618; box-shadow: 0 0 0 3px #ffb24a14, inset 0 1px 0 #ffffff08; }
   .setup[hidden] { display: none; }
@@ -418,11 +428,23 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
 
       <section class="card" id="catCard">
         <h2>Cat</h2>
+        <div class="pet">
+          <div class="led" id="petPad" title="Stroke to pet"><img id="catView" alt="Your cat, live. Stroke it to pet it." draggable="false"></div>
+          <div>
+            <b id="catSays">—</b>
+            <small style="display:block;color:var(--muted);margin-top:4px">Stroke it with your mouse or finger. Head and chin
+              get purrs. The belly is a trap until it trusts you, and too much petting earns a swat.</small>
+            <div class="needs" id="catNeeds"></div>
+          </div>
+        </div>
         <p style="margin:0 0 10px" id="catMood">—</p>
         <p class="sub">Tricks <span>play right away, even over other skins</span></p>
         <div class="chips" id="tricks"></div>
-        <p class="empty">Reacts to your Mac: waves when Claude needs you, types along while Claude works, dances to music,
-          naps when you're away 5 min (1 min after 11pm) and greets you when you're back. Otherwise: random mischief.
+        <p class="empty">It has needs that drift through the day, even while this app is closed. When one runs low it asks:
+          it waits by its bowl when hungry, asks to play when bored, wants petting when lonely, and naps when it's tired.
+          Treats fill it up, games cheer it up and use up energy. It also reacts to your Mac: waves when Claude needs you,
+          types along while Claude works, dances to music, naps when you're away 5 min (1 min after 11pm) and greets you
+          when you're back. Otherwise: random mischief.
           With the microphone on, claps startle it.</p>
         <div class="row mic"><div><label>Listen with this browser's microphone</label>
           <small>Sound stays in the browser; only levels reach the display. Works while this tab is open.</small></div>
@@ -655,9 +677,11 @@ async function poll() {
       : s.video_error ? "Couldn't play: " + s.video_error : "Nothing playing.";
     $("timerStatus").textContent = s.timer ? (s.timer.remaining ? `⏱ ${mmss(s.timer.remaining)} left${s.timer.label ? " · " + s.timer.label : ""}` : "⏰ Time's up!")
       : "Shows over any skin, flashes TIME UP at zero.";
-    const MOOD = { ask: "waving — Claude needs your input", sleep: `napping — you've been idle ${mmss(s.idle)}`,
+    const MOOD = { tired: "taking a nap to get its energy back", hungry: "waiting by its bowl for a treat",
+      lonely: "asking for some petting", bored: "bored and wants to play", ask: "waving — Claude needs your input", sleep: `napping — you've been idle ${mmss(s.idle)}`,
       greet: "happy you're back", work: "typing along with Claude", dance: "dancing to " + (s.music?.title || "music") };
     $("catMood").textContent = "The cat is " + (MOOD[s.cat_mood] || "up to random mischief") + ".";
+    renderCat(s.cat);
     $("ver").textContent = "v" + s.version;
     $("setupCard").hidden = s.paired;
     if (!bgBusy) {
@@ -998,11 +1022,49 @@ $("scanBtn").onclick = async () => {
   finally { $("scanBtn").disabled = false; }
 };
 
+// ---- the cat: live view you can stroke, and its needs
+const NEED_LABEL = { full: ["Food", "#f0506e"], energy: ["Energy", "#ffc23d"], fun: ["Fun", "#4cc9ff"], love: ["Love", "#ff7ac0"] };
+const SAYS = { pet: "Purring.", chin: "Loves a chin scratch.", rub: "It trusts you: belly rubs!", trap: "Got you! The belly was a trap.",
+  swat: "Hiss! That was too much petting.", grumpy: "Still grumpy. Give it a moment.", refuse: "Too full for another treat." };
+const WANT = { hungry: "Hungry. Feed it a treat.", lonely: "Lonely. Pet it.", bored: "Bored. Play a game with it.", tired: "Napping. Let it sleep, or wake it with a treat." };
+let catSaid = 0;
+function renderCat(c) {
+  if (!c) return;
+  $("catNeeds").replaceChildren(...Object.entries(NEED_LABEL).map(([k, [label, col]]) => {
+    const d = document.createElement("div"), m = document.createElement("div"), i = document.createElement("i");
+    m.className = "meter" + (c.needs[k] < 30 ? " low" : ""); i.style.width = c.needs[k] + "%";
+    i.style.background = col; i.style.boxShadow = `0 0 8px ${col}`;
+    m.setAttribute("role", "meter"); m.setAttribute("aria-label", label); m.setAttribute("aria-valuenow", Math.round(c.needs[k]));
+    m.append(i); d.append(label, m); return d;
+  }));
+  if (Date.now() - catSaid > 3000) $("catSays").textContent = SAYS[c.doing] || WANT[c.wants] || "Happy.";
+}
+(() => {
+  const pad = $("petPad");
+  let travel = 0, last = null, sent = 0;
+  pad.addEventListener("pointermove", (e) => {
+    const r = pad.getBoundingClientRect();
+    if (last) travel += Math.hypot(e.clientX - last[0], e.clientY - last[1]);
+    last = [e.clientX, e.clientY];
+    if (travel < 40 || Date.now() - sent < 450) return;  // a stroke, not a twitch
+    travel = 0; sent = Date.now();
+    const y = (e.clientY - r.top) / r.height * 32;  // panel rows: the sitting cat's head is 16-22, chin 23-25
+    const zone = y < 23 ? "head" : y < 26 ? "chin" : "belly";
+    api("/cat", { pet: zone }).then((res) => {
+      if (SAYS[res.did]) { $("catSays").textContent = SAYS[res.did]; catSaid = Date.now(); }
+    }).catch((err) => toast(err.message, true));
+  });
+  pad.addEventListener("pointerleave", () => { last = null; travel = 0; });
+  setInterval(() => { if (!$("catCard").hidden && !document.hidden) $("catView").src = "/cat/view?" + Date.now(); }, 250);
+})();
+
 async function loadTricks() {
   const tricks = await api("/cat/tricks");
   $("tricks").replaceChildren(...Object.entries(tricks).map(([id, label]) => {
     const b = document.createElement("button"); b.className = "chip pick"; b.textContent = label;
-    b.onclick = () => api("/cat", { do: id }).catch((e) => toast(e.message, true)); return b;
+    b.onclick = () => api("/cat", { do: id }).then((res) => {
+      if (SAYS[res.did]) { $("catSays").textContent = SAYS[res.did]; catSaid = Date.now(); }
+    }).catch((e) => toast(e.message, true)); return b;
   }));
 }
 

@@ -1,8 +1,11 @@
 """A mischievous pixel cat that lives on the panel and picks a random bit of mischief every few seconds.
 frame(t) is a pure function of time within the current act, so the same t gives the same frame (no resends).
-To add an act: write _act_<name>(img, u, r) (u = seconds into the act, r = per-act Random) and list it in ACTS."""
+To add an act: write _act_<name>(img, u, r) (u = seconds into the act, r = per-act Random) and list it in ACTS.
+It also has needs (full, energy, fun, love) that drift over real time; when one runs low it asks for it, and
+you look after it by feeding, playing and petting (stroke it in the web UI)."""
 import math
 import random
+import threading
 
 from PIL import Image
 
@@ -315,11 +318,100 @@ def _act_pet(img, u, r):  # purrs: eyes shut, tiny vibration, hearts
     draw_cat(img, 9 + int(u * 8) % 2, 16, "closed", tail=int(u * 3))
 
 
-TRICKS = {"flip": (_act_flip, 2.6), "feed": (_act_feed, 4), "fish": (_act_fish, 5), "pet": (_act_pet, 4)}
+def _bubble(img, text, colour=(255, 255, 255)):
+    """Speech bubble in the top-right corner, pointing down-left at the cat."""
+    px, w = img.load(), render.text_width(text) + 4
+    x0 = 31 - w
+    for x in range(x0, 32):
+        for y in range(1, 9):
+            if not ((x in (x0, 31)) and y in (1, 8)):
+                _put(px, x, y, (235, 235, 240))
+    _put(px, x0 + 2, 9, (235, 235, 240)); _put(px, x0 + 1, 10, (235, 235, 240))
+    render.draw_text(img, x0 + 2, 3, text, colour, font="small")
+
+
+def _act_chin(img, u, r):  # chin scratch: head tilted up, slow blink, louder purr
+    px = img.load()
+    for k in range(3):
+        p = (u * 0.8 + k / 3) % 1
+        _sprite(px, (1, 13, 26)[k], 13 - round(p * 13), HEART, tuple(int(v * (1 - p * 0.6)) for v in (255, 110, 170)))
+    draw_cat(img, 9 + int(u * 10) % 2, 15, "smug" if int(u * 1.5) % 3 else "closed", (0, -1), tail=int(u * 4))
+
+
+def _act_rub(img, u, r):  # trusts you: belly rub allowed, wiggles happily
+    px = img.load()
+    _sparkles(px, u, 15, 22)
+    draw_cat(img, 9 + round(math.sin(u * 9)), 16, "closed", tail=int(u * 6), paw=("left", "right")[int(u * 3) % 2])
+    if int(u * 2) % 2:
+        render.draw_text(img, 9, 2, "PRRR", (255, 150, 200), font="small")
+
+
+def _act_trap(img, u, r):  # the belly is a trap: grabs your hand with both paws, bunny-kicks, lets go smug
+    if u < 1.6:
+        render.draw_text(img, 25, 2, "!", (255, 220, 0))
+        draw_cat(img, 9, 17, "open", (0, 1), tail=1, paw=("left", "right")[int(u * 8) % 2])
+        if int(u * 4) % 2:
+            render.draw_text(img, 1, 3, "CHOMP", (255, 120, 90), font="small")
+    else:
+        draw_cat(img, 9, 16, "smug", (1, 0), tail=int(u * 2))
+
+
+def _act_swat(img, u, r):  # petted too much: ears back, hiss, swats
+    draw_cat(img, 8 + int(u * 7) % 3, 16, "smug", (0, 0), tail=int(u * 10), paw="right" if int(u * 5) % 2 else None)
+    _bubble(img, "HSS", (220, 40, 40) if int(u * 4) % 2 else (255, 120, 60))
+
+
+def _act_refuse(img, u, r):  # already full: sniffs the treat and turns away
+    _bubble(img, "FULL")
+    draw_cat(img, 7 - min(3, int(u * 3)), 16, _blink(u * 3) if u < 1 else "smug", (-1, 0), tail=int(u * 4))
+
+
+# ---- needs: what it asks for when one runs low
+def _act_hungry(img, u, r):  # by the empty bowl, looks at it, looks at you
+    px = img.load()
+    for x in range(21, 32):
+        _put(px, x, 30, (230, 80, 80))
+    for x in range(22, 31):
+        _put(px, x, 31, (200, 60, 60))
+    ask = int(u / 2) % 2
+    draw_cat(img, 6, 16, _blink(u), (1, 1) if not ask else (0, 0), tail=int(u * 2))
+    if ask:
+        _bubble(img, "FEED?", (230, 80, 80))
+
+
+def _act_lonely(img, u, r):  # wants you: sits close, slow wave
+    draw_cat(img, 9, 16, _blink(u), (0, 0), tail=int(u * 2), paw="left" if int(u * 1.5) % 2 else None)
+    if int(u / 2) % 2:
+        _bubble(img, "PET?", (250, 90, 130))
+
+
+def _act_bored(img, u, r):  # nudges its yarn ball, sighs
+    px = img.load()
+    bx = 24 + round(math.sin(u * 1.5) * 2)
+    for dx, dy in ((0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1), (1, -1), (1, 2)):
+        _put(px, bx + dx, 28 + dy, (230, 70, 120) if (dx + dy) % 2 else (190, 40, 90))
+    draw_cat(img, 6, 16, "smug", (1, 1), tail=int(u), paw="right" if int(u) % 3 == 0 else None)
+    if int(u / 2) % 2:
+        _bubble(img, "PLAY?", (120, 200, 255))
+
+
+TRICKS = {"flip": (_act_flip, 2.6), "feed": (_act_feed, 4), "fish": (_act_fish, 5), "pet": (_act_pet, 4),
+          "chin": (_act_chin, 3), "rub": (_act_rub, 3), "trap": (_act_trap, 2.6), "swat": (_act_swat, 2.5),
+          "refuse": (_act_refuse, 2.5)}
 TRICK_LABELS = {"flip": "Do a flip", "feed": "Feed a treat", "fish": "Catch a fish", "pet": "Pet", "laser": "Laser pointer",
                 "yarn": "Throw yarn", "knock": "Mug on a shelf…", "zoomies": "Zoomies", "peek": "Hide & seek"}
 
-MOODS = {"startle": _act_startle, "ask": _act_ask, "greet": _act_greet, "work": _act_work, "dance": _act_dance, "sleep": None}
+MOODS = {"startle": _act_startle, "ask": _act_ask, "greet": _act_greet, "work": _act_work, "dance": _act_dance, "sleep": None,
+         "tired": None, "hungry": _act_hungry, "lonely": _act_lonely, "bored": _act_bored}
+NEEDS = ("full", "energy", "fun", "love")
+DECAY = {"full": -6, "energy": -5, "fun": -10, "love": -5}  # points per hour awake (0..100)
+NAP_ENERGY = 30  # per hour while asleep
+LOW, NAP_AT, WAKE_AT = 30, 15, 70
+PLAY = {"fun": 12, "energy": -5}
+EFFECTS = {"feed": {"full": 35}, "fish": {"fun": 15, "full": 10, "energy": -5}, "pet": {"love": 6}, "chin": {"love": 8},
+           "rub": {"love": 10}, "trap": {"love": 1, "fun": 5}, "swat": {"love": -4},
+           **{k: PLAY for k in ("flip", "laser", "yarn", "zoomies", "knock", "peek")}}
+OVERPET = 14  # strokes within 20 s before it has had enough
 AWAY_SECS = 300  # no keyboard/mouse this long = you're away; cat naps
 
 ACTS = {"idle": (_act_idle, 6), "laser": (_act_laser, 7), "yarn": (_act_yarn, 5), "knock": (_act_knock, 7),
@@ -343,18 +435,82 @@ class Cat:
         self.act, self.t0, self.seed = next(self._acts)
         self._next = next(self._acts)
         self.mood, self.mood_t0, self.away, self.greet_until = None, 0.0, False, 0.0
-        self.trick: tuple[str, float] | None = None  # (name, start)
+        self.trick: tuple[str, float, float] | None = None  # (name, start, end)
+        self.needs, self.needs_at = {k: 70.0 for k in NEEDS}, start
+        self.napping, self.strokes, self.grumpy_until = False, [], 0.0
+        self._lock = threading.RLock()  # the display, the web UI and the needs clock all touch it
+
+    def state(self) -> dict:
+        return {"needs": {k: round(v, 1) for k, v in self.needs.items()}, "at": self.needs_at, "napping": self.napping}
+
+    def load(self, d: dict) -> None:
+        self.needs.update({k: max(0.0, min(100.0, float(v))) for k, v in d.get("needs", {}).items() if k in NEEDS})
+        self.needs_at, self.napping = float(d.get("at", self.needs_at)), bool(d.get("napping"))
+
+    def _apply(self, delta: dict) -> None:
+        for k, v in delta.items():
+            self.needs[k] = max(0.0, min(100.0, self.needs[k] + v))
+
+    def tick(self, t: float, asleep: bool) -> None:
+        """Needs drift with real time, also while the app was closed (up to two days)."""
+        with self._lock:
+            self._tick(t, asleep)
+
+    def _tick(self, t: float, asleep: bool) -> None:
+        h = max(0.0, min(t - self.needs_at, 48 * 3600)) / 3600
+        self.needs_at = max(t, self.needs_at)
+        self._apply({k: v * h for k, v in DECAY.items() if not (asleep and k == "energy")})
+        if asleep:
+            self._apply({"energy": NAP_ENERGY * h})
+        if self.needs["energy"] < NAP_AT:
+            self.napping = True
+        elif self.needs["energy"] >= WAKE_AT:
+            self.napping = False
+
+    def _start(self, name: str, t: float, extend: bool = False) -> float:
+        dur = (TRICKS.get(name) or ACTS[name])[1]
+        if extend and self.trick and self.trick[0] == name and t < self.trick[2]:
+            self.trick = (name, self.trick[1], t + dur)  # keep the animation going, don't restart it
+        else:
+            self.trick = (name, int(t * FPS) / FPS, t + dur)
+        return dur
 
     def do(self, name: str, t: float) -> float:
-        """Run a trick (or any mischief act) now. Returns its duration."""
-        fn_dur = TRICKS.get(name) or ACTS.get(name)
-        if not fn_dur:
+        """Run a trick (or any mischief act) now and look after its needs. Returns its duration."""
+        if name not in TRICKS and name not in ACTS:
             raise ValueError(f"unknown trick {name}")
-        self.trick = (name, int(t * FPS) / FPS)
-        return fn_dur[1]
+        if name == "feed" and self.needs["full"] > 90:
+            name = "refuse"
+        self._apply(EFFECTS.get(name, {}))
+        self.napping = False  # anything you do wakes it up
+        return self._start(name, t)
+
+    def pet(self, zone: str, t: float) -> tuple[str, float]:
+        """One stroke. zone: head | chin | belly. Returns (reaction, seconds it shows)."""
+        if zone not in ("head", "chin", "belly"):
+            raise ValueError("pet: head, chin or belly")
+        if t < self.grumpy_until:
+            return "grumpy", 0.0
+        self.strokes = [s for s in self.strokes if t - s < 20] + [t]
+        if len(self.strokes) > OVERPET:
+            self.strokes, self.grumpy_until = [], t + 10
+            self._apply(EFFECTS["swat"])
+            return "swat", self._start("swat", t)
+        name = {"head": "pet", "chin": "chin"}.get(zone) or ("rub" if self.needs["love"] >= 80 else "trap")
+        if not (self.trick and self.trick[0] == name and t < self.trick[2]):  # love counts per petting, not per pixel
+            self._apply(EFFECTS[name])
+        self.napping = False
+        return name, self._start(name, t, extend=True)
+
+    def wants(self) -> str | None:
+        """The need it would ask you for right now, lowest first."""
+        if self.napping:
+            return "tired"
+        k = min(("full", "love", "fun"), key=self.needs.get)
+        return {"full": "hungry", "love": "lonely", "fun": "bored"}[k] if self.needs[k] < LOW else None
 
     def busy(self, t: float) -> bool:
-        return bool(self.trick) and t < self.trick[1] + (TRICKS.get(self.trick[0]) or ACTS[self.trick[0]])[1]
+        return bool(self.trick) and t < self.trick[2]
 
     def _mood(self, t: float, ctx: dict | None) -> str | None:
         """ctx: idle (secs since keyboard/mouse), claude (session states), music (bool), hour."""
@@ -373,14 +529,24 @@ class Cat:
             self.away, self.greet_until = False, t + 4
         if t < self.greet_until:
             return "greet"
+        want = self.wants()
+        if want == "tired":
+            return want
         if "working" in claude and t % 30 < 20:  # mostly helps, sometimes gets distracted
             return "work"
         if ctx["music"] and t % 40 < 14:  # dances in bursts so it doesn't get old
             return "dance"
+        if want and t % 40 < 16:  # asks in bursts, mischief in between
+            return want
         return None
 
     def frame(self, t: float, ctx: dict | None = None) -> Image.Image:
-        t = int(t * FPS) / FPS  # quantize: at most FPS distinct frames per second
+        with self._lock:
+            return self._frame(int(t * FPS) / FPS, ctx)  # quantize: at most FPS distinct frames per second
+
+    def _frame(self, t: float, ctx: dict | None) -> Image.Image:
+        if ctx is not None:
+            self.tick(t, self.mood in ("sleep", "tired"))
         while t >= self._next[1]:
             self.act, self.t0, self.seed = self._next
             self._next = next(self._acts)
@@ -430,6 +596,46 @@ if __name__ == "__main__":
         assert len(frames) > 5, name
     c = Cat(0, 3)
     assert c.do("flip", 10.0) == 2.6 and c.busy(11) and not c.busy(12.7)
+    # needs drift, and it asks for the lowest one
+    n = Cat(0, 3)
+    n.tick(3600 * 6, asleep=False)  # six hours alone: fun 70-60 -> 10, full 34, love 40
+    assert n.needs["fun"] == 10 and n.wants() == "bored"
+    assert n._mood(3600 * 6 + 1, ctx) == "bored" and n._mood(3600 * 6 + 30, ctx) is None  # asks in bursts
+    n.do("yarn", 0) and n.do("laser", 0) and n.do("fish", 0)
+    assert n.needs["fun"] > LOW and n.wants() is None
+    n.needs["full"] = 20
+    assert n.wants() == "hungry"
+    assert n.do("feed", 0) == 4 and n.needs["full"] == 55 and n.wants() is None
+    n.needs["full"] = 95
+    n.do("feed", 0)
+    assert n.trick[0] == "refuse" and n.needs["full"] == 95  # won't overeat
+    n.needs["energy"] = 10
+    n.tick(n.needs_at, False)
+    assert n.wants() == "tired" and n._mood(1, ctx) == "tired"  # naps even while you're here
+    n.tick(n.needs_at + 3600 * 2, asleep=True)
+    assert not n.napping and n.wants() != "tired"  # ...and wakes up rested
+    late = Cat(0, 3)
+    late.tick(10 ** 9, False)
+    assert all(v >= 0 for v in late.needs.values())  # clamped, and offline time capped
+    # petting: zones, keeps one animation going while you stroke, belly is a trap until it trusts you
+    p = Cat(0, 3)
+    love = p.needs["love"]
+    assert p.pet("head", 1.0)[0] == "pet" and p.pet("head", 1.5)[0] == "pet" and p.trick[1] == 1.0
+    assert p.needs["love"] == love + 6 and p.busy(5.4)  # one petting, extended
+    assert p.pet("chin", 6.0)[0] == "chin"
+    p.needs["love"] = 50
+    assert p.pet("belly", 10.0)[0] == "trap"
+    p.needs["love"] = 90
+    assert p.pet("belly", 14.0)[0] == "rub"
+    for k in range(OVERPET):
+        p.pet("head", 15 + k * 0.5)
+    assert p.trick[0] == "swat" and p.pet("head", 23)[0] == "grumpy" and p.pet("head", 30)[0] == "pet"
+    q = Cat(0, 3)
+    q.load({"needs": {"full": 5, "bogus": 1}, "at": 123.0})
+    assert q.needs["full"] == 5 and q.needs_at == 123.0 and "bogus" not in q.state()["needs"]
+    for name in ("hungry", "lonely", "bored"):
+        assert len({(lambda im: (MOODS[name](im, k / 2, random.Random(0)), im.tobytes())[1])(render.blank())
+                    for k in range(10)}) > 1, name
     asleep = c.frame(11, {"idle": 999, "claude": [], "music": False, "hour": 3})
     assert c.mood is None or c.mood != "sleep" or asleep  # trick wins over the nap
     try:

@@ -89,6 +89,22 @@ def test_fake_device_end_to_end(tmp_path):
             call("/config", {"lyrics_offset": "soon"})
         assert e.value.code == 400
 
+        # the cat: petting zones, tricks feed its needs, live view, needs saved to disk
+        assert json.loads(call("/cat", {"pet": "head"})[1])["did"] == "pet"
+        assert json.loads(call("/cat", {"do": "feed"})[1])["did"] in ("feed", "refuse")
+        with pytest.raises(urllib.error.HTTPError) as e:
+            call("/cat", {"pet": "tail"})
+        assert e.value.code == 400
+        code, png = call("/cat/view")
+        assert code == 200 and png[:4] == b"\x89PNG"
+        cat = json.loads(call("/status")[1])["cat"]
+        assert set(cat["needs"]) == {"full", "energy", "fun", "love"} and cat["doing"] == "feed"
+        for _ in range(20):
+            if list(tmp_path.rglob("cat.json")):
+                break
+            time.sleep(0.2)
+        assert list(tmp_path.rglob("cat.json"))
+
         # air quality is a dashboard module like any other
         code, png = call("/render", {"skin": "dashboard", "layout": [{"id": "clock"}, {"id": "air"}]})
         assert code == 200 and png[:4] == b"\x89PNG"
