@@ -342,6 +342,20 @@ def _moon(img, y, m, c):  # phase from the date alone, no network
     draw_text(img, 14, y + 1, f"{round((1 - math.cos(2 * math.pi * p)) / 2 * 100)}%", c.col, font=m["font"])
 
 
+# India's NAQI PM2.5 bands (µg/m³): good, satisfactory, moderate, poor, very poor, severe
+AIR_BANDS = [(30, (70, 220, 110)), (60, (170, 220, 80)), (90, (255, 200, 0)), (120, (255, 130, 40)),
+             (250, (255, 60, 60)), (float("inf"), (170, 30, 60))]
+
+
+def _air(img, y, m, c):  # PM2.5 near the weather city (Indian cities, CPCB stations); blank elsewhere
+    pm = (c.weather or {}).get("pm25")
+    if pm is None:
+        return
+    draw_text(img, 0, y, "AIR", c.col, font=m["font"])
+    v = str(round(pm))
+    draw_text(img, 32 - text_width(v), y, v, next(col for top, col in AIR_BANDS if pm <= top), font=m["font"])
+
+
 # height: "font" = the module's font height, int = fixed px, None = takes the remaining space (one per layout)
 MODULES = {
     "clock":   {"label": "Clock", "height": "font", "font": True, "color": [255, 170, 60], "draw": _clock},
@@ -359,6 +373,7 @@ MODULES = {
     "progress": {"label": "Day progress bar", "height": 2, "font": False, "color": [217, 119, 87], "draw": _progress},
     "forecast": {"label": "Forecast · next 8 hours", "height": 8, "font": False, "color": [90, 160, 255], "draw": _forecast},
     "sun":     {"label": "Next sunrise / sunset", "height": "font", "font": True, "color": [235, 235, 235], "draw": _sun},
+    "air":     {"label": "Air · PM2.5 near you (India)", "height": "font", "font": True, "color": [150, 150, 170], "draw": _air},
     "moon":    {"label": "Moon phase", "height": 7, "font": True, "color": [200, 200, 220], "draw": _moon},
 }
 
@@ -526,6 +541,9 @@ if __name__ == "__main__":
         img = dashboard(n, 0, {**DEFAULT_CFG, "layout": layout}, rich, ["working"], song)
         fixed = sum(_height(mm) + 1 for mm in layout if _height(mm) is not None)
         assert fixed <= 33 and img.getbbox(), name  # everything fits on 32 rows and draws something
+    air = dashboard(n, 0, {**DEFAULT_CFG, "layout": [_m("air")]}, {**w, "pm25": 95.4}, [], None)
+    assert (255, 130, 40) in {air.getpixel((x, y)) for x in range(32) for y in range(8)}  # 95 = poor = orange
+    assert dashboard(n, 0, {**DEFAULT_CFG, "layout": [_m("air")]}, w, [], None).getbbox() is None  # no reading: blank
     many = {**DEFAULT_CFG, "layout": DEFAULT_LAYOUT * 3}
     dashboard(n, 0, many, w, ["working"], long)  # overflow just clips
     assert timer(90, 120, "tea", 0).getpixel((0, 0)) == CLAUDE and timer(90, 120, "tea", 0).getpixel((0, 1)) != CLAUDE

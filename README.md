@@ -10,12 +10,14 @@ with a local web UI.
 ## Features
 
 **Display: pick it, preview it, Apply.** Nothing reaches the panel until you press Apply.
-- **Dashboard** with 16 modules: clock (big, analog or binary), weather, 8-hour forecast, sunrise/sunset, moon
-  phase, week, month, day progress, now playing, and live **Claude Code** activity.
+- **Dashboard** with 17 modules: clock (big, analog or binary), weather, 8-hour forecast, sunrise/sunset, moon
+  phase, air quality (PM2.5, Indian cities), week, month, day progress, now playing, and live **Claude Code** activity.
 - 12 ready-made screens (Classic, Big clock, Weather station, Night owl, Calendar, Claude ops…). Reorder modules,
   pick fonts and colours, then save your own layouts.
-- **Skins:** album art, a spinning vinyl, GIFs, a Winamp-style **visualizer** (7 styles), and a mischievous pixel
-  **cat**.
+- **Skins:** album art, a spinning vinyl, GIFs, a Winamp-style **visualizer** (7 styles), a mischievous pixel
+  **cat**, and **Markets**.
+- **Markets:** pick what to track: gold (24K/22K per gram), silver per kg, USD → ₹, Nifty 50, Nifty Bank, Brent,
+  and any US stock ticker. Green when it's up on the day, red when it's down. Free, no API keys.
 - **GIF library:** 16 built-in animations, GIPHY search, or upload your own. GIFs are re-tuned for LEDs, with
   sharper shrinking, a contrast stretch and no dither noise.
 
@@ -35,9 +37,9 @@ with a local web UI.
 - Brightness, gamma (to calibrate your LEDs), weather city.
 - **Run in the background:** start at login and restart after a crash, with a switch to turn it off.
 
-| Live | Settings |
-|---|---|
-| ![Live view with Snake running](https://raw.githubusercontent.com/anishsrinivasan/dotmatrix-unlocked/main/docs/live.png) | ![Settings with the Run in the background switch](https://raw.githubusercontent.com/anishsrinivasan/dotmatrix-unlocked/main/docs/settings.png) |
+| Markets | Live | Settings |
+|---|---|---|
+| ![Markets skin tracking gold, silver, the rupee and US stocks](https://raw.githubusercontent.com/anishsrinivasan/dotmatrix-unlocked/main/docs/markets.png) | ![Live view with Snake running](https://raw.githubusercontent.com/anishsrinivasan/dotmatrix-unlocked/main/docs/live.png) | ![Settings with the Run in the background switch](https://raw.githubusercontent.com/anishsrinivasan/dotmatrix-unlocked/main/docs/settings.png) |
 
 > Not affiliated with iDotMatrix. Tested on a 32×32 `IDM-*` panel; other sizes aren't supported yet.
 
@@ -90,8 +92,8 @@ service starts without anyone logging in.
   websites can't drive your panel.
 - The microphone (visualizer, clap-to-startle the cat) is **off by default**. It runs inside your browser, and
   only 16 loudness levels are sent to the local service; no audio leaves the browser.
-- Network calls: Open-Meteo for weather (only once you set a city), GIPHY if you add a key, and video links
-  you paste.
+- Network calls: Open-Meteo for weather and snapdata.dev for air quality (only once you set a city); snapdata.dev
+  and Yahoo Finance for Markets (only while that skin is in use); GIPHY if you add a key; and video links you paste.
 
 ## Command line
 
@@ -125,3 +127,6 @@ The web UI picks all of these up automatically.
 
 GPL-3.0-or-later. It builds on [python3-idotmatrix-library](https://github.com/derkalle4/python3-idotmatrix-library),
 which is also GPL-3.0.
+
+Market and air-quality data: [snapdata.dev](https://snapdata.dev) (IBJA, ECB, CPCB, EIA), and Yahoo Finance for US
+stocks. Prices are for display only, not trading.

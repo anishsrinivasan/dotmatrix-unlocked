@@ -22,6 +22,7 @@ from . import cat
 from . import device
 from . import mic
 from . import game
+from . import markets
 from . import render
 from . import skins
 from . import system
@@ -33,6 +34,7 @@ UI_FILE = Path(__file__).with_name("ui.html")
 
 WEATHER_EVERY, WEATHER_STALE = 15 * 60, 60 * 60
 MUSIC_POLL = 3
+MARKETS_EVERY = 5 * 60  # snapdata is daily, Yahoo quotes move; only fetched while the skin is in use
 MIN_SEND_GAP = 1.0      # rate limit between frames
 HEARTBEAT = 30          # ping when nothing else was sent
 MAX_MISSES = 3          # consecutive unacked writes -> reconnect
@@ -42,10 +44,11 @@ MAX_BODY = 12_000_000
 TIMER_RING = 15  # seconds TIME UP flashes before the display goes back
 GIF_NAME = re.compile(r"^[a-z0-9_-]{1,40}\.gif$")
 
-SKINS = ("dashboard", "album", "vinyl", "gif", "visualizer", "games", "video", "cat")
+SKINS = ("dashboard", "album", "vinyl", "gif", "visualizer", "games", "video", "cat", "markets")
 DEFAULTS = {**render.DEFAULT_CFG, "skin": "dashboard", "brightness": 80, "gamma": 2.2, "interrupt_on_input": True,
             "city": "", "lat": None, "lon": None, "gif": None, "giphy_key": "",
-            "saved_skins": {}, "game": "snake", "vis_style": "bars"}
+            "saved_skins": {}, "game": "snake", "vis_style": "bars",
+            "markets": ["GOLD", "SILVER", "USDINR", "AAPL", "NVDA"]}
 
 # Hook event -> session state. https://code.claude.com/docs/en/hooks
 INPUT_NOTIFICATIONS = {"permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"}
@@ -96,6 +99,25 @@ def geocode(city: str) -> dict:
     return {"city": r["name"], "lat": r["latitude"], "lon": r["longitude"]}
 
 
+_air_cities: list | None = None
+
+
+def air_pm25(lat: float, lon: float) -> float | None:
+    """PM2.5 (µg/m³) averaged over the CPCB stations of the nearest Indian city within ~50 km; None elsewhere.
+    snapdata.dev, free, no key, refreshed every 3 hours."""
+    global _air_cities
+    base = "https://snapdata.dev/api/v1/aqi/in/"
+    if _air_cities is None:
+        _air_cities = [c for c in markets._get(base + "index.json")["cities"] if c.get("latitude") is not None]
+    dist = lambda c: (c["latitude"] - lat) ** 2 + (c["longitude"] - lon) ** 2
+    near = min(_air_cities, key=dist, default=None)
+    if not near or dist(near) > 0.25:  # ponytail: degrees², ~50 km; fine for picking a city
+        return None
+    vals = [r["avg"] for r in markets._get(base + f"city/{near['slug']}.json")["records"]
+            if r["pollutant"] == "PM2.5" and r["avg"] is not None]
+    return sum(vals) / len(vals) if vals else None
+
+
 def validated(cfg: dict, patch: dict) -> dict:
     """Merge a UI patch into a copy of cfg. Raises ValueError on bad input."""
     new = json.loads(json.dumps(cfg))
@@ -122,6 +144,8 @@ def validated(cfg: dict, patch: dict) -> dict:
             new[k] = v
         elif k == "layout":
             new[k] = _layout(v)
+        elif k == "markets":
+            new[k] = markets.valid(v)
         elif k == "saved_skins":
             if not isinstance(v, dict) or len(v) > 30:
                 raise ValueError("saved_skins: up to 30 named layouts")
@@ -174,7 +198,16 @@ class State:
         self.vis = skins.Visualizer()
         self.vis_draft = skins.Visualizer(seed=1)  # web preview animates on its own instance
         self.preview: tuple[str, bytes] = ("image/png", b"")
+        self.quotes: dict = {}  # markets id -> (value, change %)
+        self.markets_wanted = 0.0  # last time the markets skin was shown or previewed
+        self.markets_wake: asyncio.Event | None = None
+        self.markets_items: list[str] = []  # the draft's list while previewing
         self._gifs: dict[str, tuple[str, bytes, bytes]] = {}  # key -> (key, preview gif, gamma-corrected gif)
+
+    def want_markets(self, items: list[str]) -> None:
+        self.markets_wanted, self.markets_items = time.time(), items
+        if self.markets_wake:
+            self.loop.call_soon_threadsafe(self.markets_wake.set)
 
     def event(self, ev: dict) -> None:
         sid, name = ev.get("session_id"), ev.get("hook_event_name")
@@ -247,6 +280,8 @@ class State:
         if skin == "visualizer":
             return "visualizer", "frame", (self.vis_draft.frame(now, True, cfg["vis_style"]) if draft
                                             else self.vis.frame(now, bool(music), cfg["vis_style"], self.mic.bands if self.mic.live else None))
+        if skin == "markets":
+            return "markets", "frame", markets.frame(cfg["markets"], self.quotes, now, cfg["page_secs"])
         if skin == "album":
             art = (music and music["art"]) or self.last_art
             return "album", "frame", skins.album(art) if art else skins.nothing_playing()
@@ -359,6 +394,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, list(skins.PRESETS))
         if path == "/cat/tricks":
             return self._json(200, cat.TRICK_LABELS)
+        if path == "/markets":
+            return self._json(200, markets.NAMES)
         if path == "/vis_styles":
             return self._json(200, skins.Visualizer.STYLES)
         if path == "/games":
@@ -494,7 +531,9 @@ class Handler(BaseHTTPRequestHandler):
                     self.loop.call_soon_threadsafe(state.scenes.__setitem__, sid, scene)
                 return self._json(200, {"ok": True, "id": sid})
             if self.path == "/render":
-                draft = validated(state.cfg, {k: v for k, v in body.items() if k not in ("city", "giphy_key")})
+                draft = validated(state.cfg, {k: v for k, v in body.items() if k not in ("city", "giphy_key", "thumb")})
+                if draft["skin"] == "markets" and not body.get("thumb"):  # previewing it: fetch quotes now
+                    state.want_markets(draft["markets"])
                 _, kind, payload = state.output(draft)
                 if kind == "gif":
                     return self._send(200, payload[1], "image/gif")
@@ -550,6 +589,10 @@ async def weather_loop() -> None:
                              "sun": {"rise": d.get("daily", {}).get("sunrise", []),
                                      "set": d.get("daily", {}).get("sunset", [])}}
             log.info("weather %s %s°", cfg["city"], state.weather["temp"])
+            try:
+                state.weather["pm25"] = await asyncio.to_thread(air_pm25, cfg["lat"], cfg["lon"])
+            except Exception as e:
+                log.warning("air quality fetch failed: %s", e)
         except Exception as e:
             log.warning("weather fetch failed: %s", e)
             wait = 60
@@ -558,6 +601,30 @@ async def weather_loop() -> None:
         except TimeoutError:
             pass
         state.weather_wake.clear()
+
+
+async def markets_loop() -> None:
+    """Quotes for the markets skin, only while it's applied or being previewed (no calls otherwise)."""
+    state.markets_wake = asyncio.Event()
+    fetched, have = 0.0, set()
+    while True:
+        cfg, now = state.cfg, time.time()
+        if cfg["skin"] == "markets":
+            state.markets_wanted = now
+        items = list(dict.fromkeys((cfg["markets"] if cfg["skin"] == "markets" else []) + state.markets_items))
+        if now - state.markets_wanted < 120 and (now - fetched > MARKETS_EVERY or not set(items) <= have):
+            try:
+                state.quotes.update(await asyncio.to_thread(markets.fetch, items))
+                fetched, have = now, set(items)
+                log.info("markets: %d quotes", len(state.quotes))
+            except Exception as e:
+                log.warning("markets fetch failed: %s", e)
+                fetched = now - MARKETS_EVERY + 60
+        try:
+            await asyncio.wait_for(state.markets_wake.wait(), 30)
+        except TimeoutError:
+            pass
+        state.markets_wake.clear()
 
 
 async def idle_loop() -> None:
@@ -698,4 +765,5 @@ async def main(port: int = PORT, fake: bool = False, open_browser: bool = False,
     if open_browser:
         import webbrowser
         webbrowser.open(url)
-    await asyncio.gather(weather_loop(), music_loop(), idle_loop(), display_loop(fake))
+    state.loop = asyncio.get_running_loop()
+    await asyncio.gather(weather_loop(), music_loop(), idle_loop(), markets_loop(), display_loop(fake))

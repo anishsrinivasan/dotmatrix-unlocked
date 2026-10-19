@@ -303,6 +303,7 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
           <button class="skin" data-skin="gif"><b>GIF</b><small>Loop one from your library</small></button>
           <button class="skin" data-skin="visualizer"><b>Visualizer</b><small>Winamp-style bars to your music</small></button>
           <button class="skin" data-skin="cat"><b>Cat</b><small>A mischievous pixel cat</small></button>
+          <button class="skin" data-skin="markets"><b>Markets</b><small>Gold, silver, rupee and US stocks</small></button>
         </div>
       </section>
 
@@ -379,6 +380,20 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
           <small>Sound stays in the browser; only levels reach the display. Works while this tab is open.</small></div>
           <label class="switch"><input type="checkbox" class="micToggle"><span></span></label></div>
         <div class="meter"><i class="micMeter"></i></div>
+      </section>
+
+      <section class="card" id="marketsCard">
+        <h2>Markets</h2>
+        <p class="sub">Track <span>tap to add or remove · up to 10, five per page</span></p>
+        <div class="chips" id="mkBuiltin"></div>
+        <p class="sub" style="margin-top:16px">US stocks <span>any ticker, like AAPL, MSFT or ^GSPC</span></p>
+        <div class="inline">
+          <input type="text" id="mkTicker" placeholder="Ticker" maxlength="11" style="width:140px" aria-label="US ticker">
+          <button class="btn ghost" id="mkAdd">Add</button>
+        </div>
+        <div class="chips" id="mkStocks" style="margin-top:10px"></div>
+        <p class="empty">Green is up on the day, red is down. Gold, silver, USD → ₹, Nifty and Brent update daily
+          (IBJA, ECB via snapdata.dev); stocks every 5 minutes from Yahoo Finance. Fetched only while this skin is in use.</p>
       </section>
 
       <section class="card" id="catCard">
@@ -508,7 +523,7 @@ let applied = null, draft = null, library = [], lastCrc = null, draftUrl = null;
 const INFO = { album: "Album art has no settings. Shows the cover of what's playing, or the last cover seen.",
   vinyl: "Vinyl has no settings. The record spins with the album cover on its label; a default label when nothing plays." };
 let gamePick = "snake";  // live choice, not part of the draft
-const LABELS = { skin: "skin", gif: "GIF", vis_style: "visualizer style", layout: "modules", clock_24h: "clock format", anim_fps: "animation speed", page_secs: "page time", interrupt_on_input: "input override", brightness: "brightness",
+const LABELS = { skin: "skin", gif: "GIF", vis_style: "visualizer style", layout: "modules", clock_24h: "clock format", anim_fps: "animation speed", page_secs: "page time", interrupt_on_input: "input override", brightness: "brightness", markets: "markets",
   gamma: "gamma", city: "city" };
 const DRAFT_KEYS = Object.keys(LABELS);
 
@@ -560,6 +575,7 @@ function render() {
   $("gifCard").hidden = draft.skin !== "gif";
   $("visCard").hidden = draft.skin !== "visualizer";
   $("catCard").hidden = draft.skin !== "cat";
+  $("marketsCard").hidden = draft.skin !== "markets"; renderMarkets();
   $("dashCard").hidden = draft.skin !== "dashboard";
   $("infoCard").hidden = !INFO[draft.skin];
   $("infoText").textContent = INFO[draft.skin] || "";
@@ -927,7 +943,7 @@ async function renderThumbs() {
     }
     try {
       const r = await fetch("/render", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...base, skin: b.dataset.skin }) });
+        body: JSON.stringify({ ...base, skin: b.dataset.skin, thumb: true }) });
       if (!r.ok) continue;
       const old = img.src; img.src = URL.createObjectURL(await r.blob());
       if (old.startsWith("blob:")) URL.revokeObjectURL(old);
@@ -968,6 +984,36 @@ async function loadTricks() {
   }));
 }
 
+// ---- markets: built-in assets toggle, US tickers added by hand
+let MK = {};
+async function loadMarkets() { MK = await api("/markets"); render(); }
+function setMarkets(list) {
+  if (list.length > 10) return toast("Up to 10 at a time. Remove one first.", true);
+  edit({ markets: list, skin: "markets" });
+}
+function renderMarkets() {
+  const cur = draft.markets || [];
+  $("mkBuiltin").replaceChildren(...Object.entries(MK).map(([id, label]) => {
+    const b = document.createElement("button"); b.className = "chip pick" + (cur.includes(id) ? " active" : "");
+    b.textContent = label; b.setAttribute("aria-pressed", cur.includes(id));
+    b.onclick = () => setMarkets(cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]); return b;
+  }));
+  $("mkStocks").replaceChildren(...cur.filter((id) => !MK[id]).map((id) => {
+    const c = document.createElement("span"); c.className = "chip active";
+    const x = document.createElement("button"); x.className = "x"; x.textContent = "×"; x.setAttribute("aria-label", "Remove " + id);
+    x.onclick = () => setMarkets(cur.filter((v) => v !== id)); c.append(id, x); return c;
+  }));
+}
+function addTicker() {
+  const v = $("mkTicker").value.trim().toUpperCase();
+  if (!v) return;
+  if (!/^\^?[A-Z][A-Z0-9.\-]{0,9}$/.test(v)) return toast("Use a ticker like AAPL or ^GSPC", true);
+  if (!draft.markets.includes(v)) setMarkets([...draft.markets, v]);
+  $("mkTicker").value = "";
+}
+$("mkAdd").onclick = addTicker;
+$("mkTicker").onkeydown = (e) => { if (e.key === "Enter") addTicker(); };
+
 async function loadVis() {
   const styles = await api("/vis_styles");
   $("visList").replaceChildren(...Object.entries(styles).map(([id, label]) => {
@@ -1004,10 +1050,10 @@ window.addEventListener("beforeunload", (e) => { if (changes().length) e.prevent
     }
   } catch {}
   applied = await api("/config"); draft = clone(applied);
-  render(); renderPreview(); renderThumbs(); loadLibrary(); loadPresets(); loadGames(); loadVis(); loadTricks(); poll();
+  render(); renderPreview(); renderThumbs(); loadLibrary(); loadPresets(); loadGames(); loadVis(); loadTricks(); loadMarkets(); poll();
   setInterval(() => !document.hidden && renderThumbs(), 20000);
   setInterval(poll, 1000);
-  setInterval(() => draft.skin === "dashboard" && renderPreview(), 5000);
+  setInterval(() => ["dashboard", "markets"].includes(draft.skin) && renderPreview(), 5000);  // clock ticks, quotes arrive, pages flip
   setInterval(() => ["visualizer", "cat"].includes(draft.skin) && !document.hidden && renderPreview(), 250);  // animate the draft  // keep the clock in the preview current
 })();
 </script>

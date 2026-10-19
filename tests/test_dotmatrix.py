@@ -11,7 +11,7 @@ import urllib.request
 
 import pytest
 
-MODULES = ["render", "skins", "game", "cat", "mic", "system", "video"]
+MODULES = ["render", "skins", "game", "cat", "mic", "system", "video", "markets"]
 
 
 @pytest.mark.parametrize("module", MODULES)
