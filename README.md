@@ -5,14 +5,39 @@
 Turn a cheap iDotMatrix-compatible **32×32 Bluetooth LED panel** into a desk companion, run from your computer
 with a local web UI.
 
-- **Dashboard**: 16 modules (big, analog or binary clock, weather, 8-hour forecast, sunrise/sunset, moon phase,
-  week, month, day progress, now playing, live **Claude Code** activity…). Start from 12 ready-made screens, or
-  rearrange, restyle and save your own.
-- **Skins**: album art, a spinning vinyl, any GIF (16 built-in animations, GIPHY, or your own: GIFs are
-  re-tuned for LEDs with sharper shrinking, contrast stretch and no dither noise), a Winamp-style visualizer, and
-  a mischievous pixel **cat** that reacts to what you're doing and does tricks on request.
-- **Live**: Snake, Tetris, Breakout, 2048 and Flappy; YouTube or local video; a countdown timer; quick messages.
-- Everything previews in the browser first and only goes to the panel when you press **Apply**.
+![The web UI: a live preview of the panel next to skins and dashboard modules](https://raw.githubusercontent.com/anishsrinivasan/dotmatrix-unlocked/main/docs/display.png)
+
+## Features
+
+**Display: pick it, preview it, Apply.** Nothing reaches the panel until you press Apply.
+- **Dashboard** with 16 modules: clock (big, analog or binary), weather, 8-hour forecast, sunrise/sunset, moon
+  phase, week, month, day progress, now playing, and live **Claude Code** activity.
+- 12 ready-made screens (Classic, Big clock, Weather station, Night owl, Calendar, Claude ops…). Reorder modules,
+  pick fonts and colours, then save your own layouts.
+- **Skins:** album art, a spinning vinyl, GIFs, a Winamp-style **visualizer** (7 styles), and a mischievous pixel
+  **cat**.
+- **GIF library:** 16 built-in animations, GIPHY search, or upload your own. GIFs are re-tuned for LEDs, with
+  sharper shrinking, a contrast stretch and no dither noise.
+
+**Live: takes over the panel right away. Stop it and your skin comes back.**
+- **Games:** Snake, Tetris, Breakout, 2048 and Flappy, played with the keyboard or on-screen buttons.
+- **Video:** YouTube links or uploaded clips (experimental).
+- **Countdown timer** that shows over any skin, plus quick text or image messages.
+
+**It reacts to you**
+- The cat naps when you're idle, waves when Claude Code needs your input, and dances to your music. Ask it to do
+  a flip, feed it, or have it catch a fish.
+- The microphone (off by default, runs in your browser) drives the visualizer, and a clap startles the cat.
+- Claude Code hooks show when sessions are working or waiting on you, and can pull the dashboard up when Claude
+  needs input.
+
+**Settings**
+- Brightness, gamma (to calibrate your LEDs), weather city.
+- **Run in the background:** start at login and restart after a crash, with a switch to turn it off.
+
+| Live | Settings |
+|---|---|
+| ![Live view with Snake running](https://raw.githubusercontent.com/anishsrinivasan/dotmatrix-unlocked/main/docs/live.png) | ![Settings with the Run in the background switch](https://raw.githubusercontent.com/anishsrinivasan/dotmatrix-unlocked/main/docs/settings.png) |
 
 > Not affiliated with iDotMatrix. Tested on a 32×32 `IDM-*` panel; other sizes aren't supported yet.
 

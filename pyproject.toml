@@ -38,6 +38,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/dotmatrix_unlocked"]
 
+[tool.hatch.build.targets.sdist]
+exclude = ["docs"]  # README screenshots load from GitHub
+
 [dependency-groups]
 dev = ["pytest>=8"]
 

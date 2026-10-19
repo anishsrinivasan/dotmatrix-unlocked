@@ -942,7 +942,8 @@ function showView(id) {
   remember("view", id);
 }
 document.querySelectorAll(".view").forEach((v) => (v.onclick = () => showView(v.dataset.view)));
-try { const v = localStorage.getItem("view"); if (v && $(v)) showView(v); } catch {}
+// #live / #settings link to a view (not an element id, so the page doesn't scroll)
+try { const h = location.hash.slice(1), v = h ? "view" + h[0].toUpperCase() + h.slice(1) : localStorage.getItem("view"); if (v && $(v)) showView(v); } catch {}
 
 $("scanBtn").onclick = async () => {
   $("scanBtn").disabled = true; $("scanStatus").textContent = "Looking for panels… (about 6 seconds)";
