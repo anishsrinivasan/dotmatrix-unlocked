@@ -22,7 +22,7 @@ Needs Python 3.12+ and Bluetooth.
 
 ```sh
 uv tool install dotmatrix-unlocked     # or: pipx install dotmatrix-unlocked
-dotmatrix                              # starts it and opens http://127.0.0.1:7766
+dotmatrix                              # opens http://127.0.0.1:7766; offers to keep running in the background
 ```
 
 Don't have `uv`? See [docs.astral.sh/uv](https://docs.astral.sh/uv/getting-started/installation/), or use `pipx`.
@@ -35,10 +35,12 @@ No panel? `dotmatrix run --fake` runs everything with the browser preview standi
 Then, optionally:
 
 ```sh
-dotmatrix service install   # start at login, restart if it crashes
+dotmatrix service install   # run in the background: start at login, restart if it crashes (also in Settings)
 dotmatrix hooks install     # show Claude Code activity (edits ~/.claude/settings.json, keeps a .bak)
 dotmatrix doctor            # checks everything and prints the fix for anything missing
 ```
+
+To stop the background copy: turn off **Run in the background** in Settings, or `dotmatrix service uninstall`.
 
 ## Platforms
 
