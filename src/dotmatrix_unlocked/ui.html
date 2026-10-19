@@ -241,14 +241,18 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
+.star { margin-left: auto; text-decoration: none; }
+.star:hover { color: var(--amber); border-color: var(--edge-2); }
+h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
 </style>
 </head>
 <body>
 <main>
   <header>
-    <h1>dotmatrix</h1>
+    <h1>dotmatrix <small id="ver"></small></h1>
     <span class="pill"><span class="dot" id="conn"></span><span id="connText">connecting…</span></span>
     <span class="pill" id="showing">—</span>
+    <a class="pill star" href="https://github.com/anishsrinivasan/dotmatrix-unlocked" target="_blank" rel="noopener">★ Star on GitHub</a>
   </header>
 
   <div class="grid">
@@ -616,6 +620,7 @@ async function poll() {
     const MOOD = { ask: "waving — Claude needs your input", sleep: `napping — you've been idle ${mmss(s.idle)}`,
       greet: "happy you're back", work: "typing along with Claude", dance: "dancing to " + (s.music?.title || "music") };
     $("catMood").textContent = "The cat is " + (MOOD[s.cat_mood] || "up to random mischief") + ".";
+    $("ver").textContent = "v" + s.version;
     $("setupCard").hidden = s.paired;
     if (!bgBusy) {
       $("bgSwitch").checked = s.service_installed; bgSelf = s.service;

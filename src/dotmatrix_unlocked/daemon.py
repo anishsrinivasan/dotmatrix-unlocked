@@ -17,6 +17,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from . import __version__
 from . import cat
 from . import device
 from . import mic
@@ -385,7 +386,7 @@ class Handler(BaseHTTPRequestHandler):
             now, m = time.time(), state.music
             return self._json(200, {
                 "connected": state.connected, "showing": state.current, "paired": bool(state.address) or FAKE,
-                "fake": FAKE, "service": SERVICE, "service_installed": system.service_installed(),
+                "fake": FAKE, "version": __version__, "service": SERVICE, "service_installed": system.service_installed(),
                 "preview_crc": zlib.crc32(state.preview[1]), "skin": state.cfg["skin"],
                 "secs_since_ack": round(time.monotonic() - state.last_ack),
                 "weather": state.weather, "city": state.cfg["city"],
