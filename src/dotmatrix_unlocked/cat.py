@@ -3,6 +3,7 @@ frame(t) is a pure function of time within the current act, so the same t gives 
 To add an act: write _act_<name>(img, u, r) (u = seconds into the act, r = per-act Random) and list it in ACTS.
 It also has needs (full, energy, fun, love) that drift over real time; when one runs low it asks for it, and
 you look after it by feeding, playing and petting (stroke it in the web UI)."""
+import array
 import math
 import random
 import re
@@ -445,6 +446,18 @@ PERSONA = ("You are Pixel, a small, playful, slightly sassy cat who lives on an 
            "[knock], or [feed] (only when they give you food).")
 DOABLE = ("flip", "feed", "fish", "laser", "yarn", "zoomies", "peek", "knock")  # what it may choose to do after talking
 SPOKEN = 14  # characters a second the browser speaks them, for the mouth
+VOICE = ("You are the voice of a cartoon cat. Say the user's message out loud exactly as written, word for word, in a "
+         "high, bright, playful cat voice, a little purr in it. Don't answer it or add anything, except an optional "
+         "short meow at the start.")
+VOICE_RATE = 1.2  # the voice is played a little fast and high, Talking Tom style, and still easy to follow
+
+
+def levels(pcm: bytes, rate: float = VOICE_RATE) -> list[float]:
+    """Loudness (0..1) of 24 kHz 16-bit mono speech per 1/TALK_HZ s, played at rate x speed: drives the mouth."""
+    a, step = array.array("h", pcm[:len(pcm) // 2 * 2]), int(24000 * rate / TALK_HZ)
+    env = [math.sqrt(sum(v * v for v in a[i:i + step]) / step) for i in range(0, len(a), step)]
+    peak = max(env, default=0) or 1
+    return [round(v / peak, 2) for v in env]
 EFFECTS = {"feed": {"full": 35}, "fish": {"fun": 15, "full": 10, "energy": -5}, "pet": {"love": 6}, "chin": {"love": 8},
            "rub": {"love": 10}, "speak": {"love": 3, "fun": 2}, "trap": {"love": 1, "fun": 5}, "swat": {"love": -4},
            **{k: PLAY for k in ("flip", "laser", "yarn", "zoomies", "knock", "peek")}}
@@ -561,14 +574,20 @@ class Cat:
                 "tired": "You're sleepy."}.get(self.wants(), "You're content.")
         return [{"role": "system", "content": f"{PERSONA} {feel}"}, *self.chat, {"role": "user", "content": said[:300]}]
 
-    def answer(self, said: str, reply: str, t: float) -> tuple[str, str | None, float]:
-        """Say the model's reply, the mouth moving on vowels for as long as it takes to speak.
-        Returns (the words to speak, a trick it chose to do after, seconds of talking)."""
+    @staticmethod
+    def reply(reply: str) -> tuple[str, str | None]:
+        """The model's reply -> (the words to speak, a trick it chose to do after them)."""
         trick = next((w for w in re.findall(r"\[(\w+)\]", reply.lower()) if w in DOABLE), None)
-        words = " ".join(re.sub(r"\[[^\]]*\]|\*[^*]*\*|[^\w\s.,!?'-]", " ", reply).split())[:240] or "Meow."
+        return " ".join(re.sub(r"\[[^\]]*\]|\*[^*]*\*|[^\w\s.,!?'-]", " ", reply).split())[:240] or "Meow.", trick
+
+    def answer(self, said: str, reply: str, t: float, pcm: bytes = b"") -> tuple[str, str | None, float]:
+        """Say the model's reply, the mouth following the voice (pcm) or, for the browser's voice, the vowels.
+        Returns (the words to speak, a trick it chose to do after, seconds of talking)."""
+        words, trick = self.reply(reply)
         self.chat = (self.chat + [{"role": "user", "content": said[:300]}, {"role": "assistant", "content": reply[:300]}])[-6:]
         level = [0.9 if c in "aeiouy" else 0.5 if c.isalpha() else 0.05 for c in words.lower()]
-        env = [level[int(i * SPOKEN / TALK_HZ)] for i in range(int(len(level) * TALK_HZ / SPOKEN))] or [0.5]
+        env = levels(pcm) if pcm else [level[int(i * SPOKEN / TALK_HZ)] for i in range(int(len(level) * TALK_HZ / SPOKEN))]
+        env = env or [0.5]
         return words, trick, self.talk("speak", t, env[:30 * TALK_HZ])
 
     def wants(self) -> str | None:
@@ -670,6 +689,10 @@ if __name__ == "__main__":
     w, trick, secs = c.answer("want fish?", "*purrs* Ooh, fish! Gimme gimme. [fish] 🐟", 1.0)
     assert (w, trick) == ("Ooh, fish! Gimme gimme.", "fish") and 1 < secs < 3 and c.trick[0] == "speak"
     assert c.answer("x", "[delete] Meow", 2)[1] is None and c.answer("x", "[]", 2)[0] == "Meow."
+    tone = array.array("h", [int(8000 * math.sin(k / 5)) if k < 24000 else 0 for k in range(48000)]).tobytes()
+    env = levels(tone)  # one loud second, one silent, played 1.2x fast
+    assert len(env) == 34 and env[0] == 1.0 and env[-1] == 0.0
+    assert abs(c.answer("hi", "Meow there.", 3, tone)[2] - (34 / TALK_HZ + 0.3)) < 0.01
     msgs = c.prompt("hi")
     assert msgs[0]["role"] == "system" and msgs[-1] == {"role": "user", "content": "hi"} and len(msgs) == 8
     assert c.do("flip", 10.0) == 2.6 and c.busy(11) and not c.busy(12.7)

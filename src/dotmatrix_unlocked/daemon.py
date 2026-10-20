@@ -50,7 +50,8 @@ DEFAULTS = {**render.DEFAULT_CFG, "skin": "dashboard", "brightness": 80, "gamma"
             "city": "", "lat": None, "lon": None, "gif": None, "giphy_key": "",
             "saved_skins": {}, "game": "snake", "vis_style": "bars",
             "markets": ["GOLD", "SILVER", "USDINR", "AAPL", "NVDA"], "markets_vs": "prev", "markets_show": "both", "lyrics_offset": 0.0,
-            "cat_ai_url": "https://openrouter.ai/api/v1", "cat_ai_model": "anthropic/claude-haiku-5.5", "cat_ai_key": ""}
+            "cat_ai_url": "https://openrouter.ai/api/v1", "cat_ai_model": "anthropic/claude-haiku-5.5", "cat_ai_key": "",
+            "cat_voice": "openai/gpt-audio-mini"}  # "" = the browser's own voice
 
 # Hook event -> session state. https://code.claude.com/docs/en/hooks
 INPUT_NOTIFICATIONS = {"permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"}
@@ -120,15 +121,32 @@ def air_pm25(lat: float, lon: float) -> float | None:
     return sum(vals) / len(vals) if vals else None
 
 
-def ask_ai(messages: list) -> str:
-    """One reply from the chat server in settings: OpenRouter by default, or any OpenAI-compatible one."""
+def _ai(body: dict):
+    """A chat completion from the server in settings: OpenRouter by default, or any OpenAI-compatible one."""
     if not state.cfg["cat_ai_key"] and "openrouter.ai" in state.cfg["cat_ai_url"]:
         raise ValueError("no OpenRouter key yet")
-    body = {"model": state.cfg["cat_ai_model"], "messages": messages, "max_tokens": 80, "temperature": 0.9}
     req = urllib.request.Request(state.cfg["cat_ai_url"].rstrip("/") + "/chat/completions", json.dumps(body).encode(),
                                  {"Content-Type": "application/json", "Authorization": f"Bearer {state.cfg['cat_ai_key']}",
                                   "X-Title": "dotmatrix-unlocked"})
-    return json.loads(urllib.request.urlopen(req, timeout=60).read())["choices"][0]["message"]["content"]
+    return urllib.request.urlopen(req, timeout=60)
+
+
+def ask_ai(messages: list) -> str:
+    body = {"model": state.cfg["cat_ai_model"], "messages": messages, "max_tokens": 80, "temperature": 0.9}
+    return json.loads(_ai(body).read())["choices"][0]["message"]["content"]
+
+
+def voice_ai(words: str) -> bytes:
+    """The words spoken in a cat voice: 24 kHz 16-bit mono. Audio replies only come streamed."""
+    body = {"model": state.cfg["cat_voice"], "modalities": ["text", "audio"], "audio": {"voice": "coral", "format": "pcm16"},
+            "stream": True, "messages": [{"role": "system", "content": cat.VOICE}, {"role": "user", "content": words}]}
+    chunks = []
+    with _ai(body) as r:
+        for line in r:
+            if line.startswith(b"data: ") and line[6:].strip() != b"[DONE]":
+                delta = (json.loads(line[6:]).get("choices") or [{}])[0].get("delta") or {}
+                chunks.append((delta.get("audio") or {}).get("data") or "")
+    return base64.b64decode("".join(chunks))
 
 
 def validated(cfg: dict, patch: dict) -> dict:
@@ -154,6 +172,10 @@ def validated(cfg: dict, patch: dict) -> dict:
         elif k == "cat_ai_model":
             if not re.fullmatch(r"[\w.:/-]{1,80}", str(v)):
                 raise ValueError("cat_ai_model: a model id like anthropic/claude-haiku-5.5")
+            new[k] = str(v)
+        elif k == "cat_voice":
+            if not re.fullmatch(r"[\w.:/-]{0,80}", str(v)):
+                raise ValueError("cat_voice: a model id like openai/gpt-audio-mini, or empty for the browser's voice")
             new[k] = str(v)
         elif k == "cat_ai_key":
             new[k] = re.sub(r"[^A-Za-z0-9_-]", "", str(v))[:200]
@@ -518,11 +540,18 @@ class Handler(BaseHTTPRequestHandler):
                     except (OSError, KeyError, IndexError, ValueError) as e:
                         return self._json(503, {"error": f"The cat's AI didn't answer ({e}). Check the OpenRouter key "
                                                          f"and model in the Cat card"})
-                    words, trick, dur = state.cat.answer(said, reply, time.time())
+                    pcm = b""
+                    if state.cfg["cat_voice"]:
+                        try:
+                            pcm = voice_ai(cat.Cat.reply(reply)[0])
+                        except (OSError, KeyError, IndexError, ValueError) as e:  # the browser's voice will do
+                            log.warning("cat voice: %s", e)
+                    words, trick, dur = state.cat.answer(said, reply, time.time(), pcm)
                     if trick:  # it acts on what you said once it's done talking
                         threading.Timer(dur, state.cat.do, (trick, now + dur)).start()
                     state.cat_until = max(state.cat_until, time.time() + dur + (8 if trick else 0))
-                    return self._json(200, {"ok": True, "did": "speak", "reply": words, "trick": trick, "secs": dur})
+                    return self._json(200, {"ok": True, "did": "speak", "reply": words, "trick": trick, "secs": dur,
+                                            "audio": base64.b64encode(pcm).decode(), "rate": cat.VOICE_RATE})
                 if "talk" in body:
                     did, dur = str(body["talk"]), state.cat.talk(str(body["talk"]), now, body.get("env"))
                 elif "pet" in body:

@@ -2,6 +2,13 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.12 · 2026-10-20
+
+### Changed
+- The cat has a real voice: its replies are spoken by OpenRouter's `openai/gpt-audio-mini` as a cartoon cat, played
+  a little fast and high, Talking Tom style, instead of the browser's thin robotic voice. The cat's mouth on the
+  panel follows the actual audio. Uses the same OpenRouter key; set `cat_voice` to `""` for the browser's voice.
+
 ## 0.1.11 · 2026-10-20
 
 ### Changed

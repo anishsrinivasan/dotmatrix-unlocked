@@ -1029,10 +1029,19 @@ async function talkStart() {
     speaking = true; r.abort();  // don't hear its own voice
     const done = () => { speaking = false; deaf = talk ? talk.ctx.currentTime + 0.4 : 0; hear(); };
     try {
-      const { reply } = await api("/cat", { ask: said });
-      const u = Object.assign(new SpeechSynthesisUtterance(reply), { pitch: 1.9, rate: 1.1, lang });
-      u.onend = u.onerror = done;
-      deaf = Infinity; speechSynthesis.speak(u);
+      const { reply, audio, rate } = await api("/cat", { ask: said });
+      deaf = Infinity;
+      if (audio) {  // the cat's voice: 24 kHz 16-bit mono, played a little fast and high
+        const pcm = new Int16Array(Uint8Array.from(atob(audio), (c) => c.charCodeAt(0)).buffer);
+        const buf = ctx.createBuffer(1, pcm.length, 24000);
+        buf.getChannelData(0).set(Float32Array.from(pcm, (v) => v / 32768));
+        const play = Object.assign(ctx.createBufferSource(), { buffer: buf, onended: done });
+        play.playbackRate.value = rate; play.connect(ctx.destination); play.start();
+      } else {
+        const u = Object.assign(new SpeechSynthesisUtterance(reply), { pitch: 1.4, rate: 1, lang });
+        u.onend = u.onerror = done;
+        speechSynthesis.speak(u);
+      }
     } catch (err) {
       chat = false; done(); toast(err.message + ". Repeating you until then.", true);
     }

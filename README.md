@@ -35,8 +35,8 @@ with a local web UI.
   UI: head and chin get purrs, the belly is a trap until it trusts you, and too much petting earns a swat.
 - **Talk to the cat**, Talking Tom style: it answers what you say in a squeaky voice, its mouth moving on the
   panel, and does a trick if you ask ("can you do a flip?"). Replies come from an AI model on
-  [OpenRouter](https://openrouter.ai/keys): paste your key in the Cat card (Claude Haiku by default, any model id
-  works). Without a key, it repeats you back.
+  [OpenRouter](https://openrouter.ai/keys): paste your key in the Cat card (Claude Haiku writes the reply, any model
+  id works; `openai/gpt-audio-mini` voices it as a cartoon cat). Without a key, it repeats you back.
 - The cat naps when you're idle, waves when Claude Code needs your input, and dances to your music. Ask it to do
   a flip, feed it, or have it catch a fish.
 - The microphone (off by default, runs in your browser) drives the visualizer, and a clap startles the cat.
