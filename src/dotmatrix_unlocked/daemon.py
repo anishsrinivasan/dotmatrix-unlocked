@@ -665,6 +665,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"ok": True})
             return self._json(404, {"error": "not found"})
         except Exception as e:
+            log.warning("POST %s: %r", self.path, e, exc_info=not isinstance(e, ValueError))
             self._json(400, {"error": str(e)})
 
     def log_message(self, fmt, *args):

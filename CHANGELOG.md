@@ -2,6 +2,16 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.14 · 2026-10-20
+
+### Fixed
+- Talking to the cat fell back to repeating you for good after one hiccup (a failed reply, or the browser's speech
+  service dropping out). With an OpenRouter key it now keeps chatting: a failed reply shows a message, and speech
+  recognition backs off and reconnects.
+- The cat picked a trick for almost anything you said, and replies ran long, so the trick you asked for came late.
+  It now does tricks only when asked (or offered food), after a short one-sentence answer.
+- The cat could be changed by the web UI and the display at the same moment, which could fail a request.
+
 ## 0.1.13 · 2026-10-20
 
 ### Fixed

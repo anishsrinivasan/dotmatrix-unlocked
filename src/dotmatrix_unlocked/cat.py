@@ -441,9 +441,10 @@ NAP_ENERGY = 30  # per hour while asleep
 LOW, NAP_AT, WAKE_AT = 30, 15, 70
 PLAY = {"fun": 12, "energy": -5}
 PERSONA = ("You are Pixel, a small, playful, slightly sassy cat who lives on an LED panel on your human's desk. Talk like a "
-           "cat would if it could talk: one or two short sentences, under 25 words, no emojis, nothing in asterisks. If what "
-           "they say calls for it, end with one action in brackets: [flip], [fish], [laser], [yarn], [zoomies], [peek], "
-           "[knock], or [feed] (only when they give you food).")
+           "cat would if it could talk: one short sentence, under 15 words, no emojis, nothing in asterisks. When they ask "
+           "you to do something you can do, do it (happily or grudgingly) by ending with its action in brackets: [flip], "
+           "[fish] (catch a fish), [laser] (chase a laser), [yarn], [zoomies], [peek] (hide and seek), [knock] (knock a "
+           "mug off the shelf), or [feed] when they give you food or a treat. Otherwise, no brackets.")
 DOABLE = ("flip", "feed", "fish", "laser", "yarn", "zoomies", "peek", "knock")  # what it may choose to do after talking
 SPOKEN = 14  # characters a second the browser speaks them, for the mouth
 VOICE = ("You are the voice of a cartoon cat. Say the user's message out loud exactly as written, word for word, in a "
@@ -477,6 +478,13 @@ def schedule(start: float, seed: int):
             yield name, t, r.random()
             t += ACTS[name][1]
             last = name
+
+
+def _locked(fn):
+    def run(self, *args):
+        with self._lock:
+            return fn(self, *args)
+    return run
 
 
 class Cat:
@@ -525,6 +533,7 @@ class Cat:
             self.trick = (name, int(t * FPS) / FPS, t + dur)
         return dur
 
+    @_locked
     def do(self, name: str, t: float) -> float:
         """Run a trick (or any mischief act) now and look after its needs. Returns its duration."""
         if name not in TRICKS and name not in ACTS:
@@ -535,6 +544,7 @@ class Cat:
         self.napping = False  # anything you do wakes it up
         return self._start(name, t)
 
+    @_locked
     def pet(self, zone: str, t: float) -> tuple[str, float]:
         """One stroke. zone: head | chin | belly. Returns (reaction, seconds it shows)."""
         if zone not in ("head", "chin", "belly"):
@@ -552,6 +562,7 @@ class Cat:
         self.napping = False
         return name, self._start(name, t, extend=True)
 
+    @_locked
     def talk(self, mode: str, t: float, env: list | None = None) -> float:
         """mode: listen (you're talking) | speak (playing it back; env = loudness per 1/TALK_HZ s) | done."""
         if mode == "done":
@@ -580,6 +591,7 @@ class Cat:
         trick = next((w for w in re.findall(r"\[(\w+)\]", reply.lower()) if w in DOABLE), None)
         return " ".join(re.sub(r"\[[^\]]*\]|\*[^*]*\*|[^\w\s.,!?'-]", " ", reply).split())[:240] or "Meow.", trick
 
+    @_locked
     def answer(self, said: str, reply: str, t: float, pcm: bytes = b"") -> tuple[str, str | None, float]:
         """Say the model's reply, the mouth following the voice (pcm) or, for the browser's voice, the vowels.
         Returns (the words to speak, a trick it chose to do after, seconds of talking)."""

@@ -1003,7 +1003,7 @@ const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 let talk = null;
 async function talkStart() {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-  let chat = !!SR, speaking = false, local = false, cur = null;
+  let chat = !!(SR && applied.cat_ai_key), speaking = false, local = false, cur = null, wait = 200;
   const lang = navigator.language || "en-US";
   try {  // on-device recognition where the browser has it (newer Chrome), so your voice stays on this computer
     const a = await SR.available({ langs: [lang], processLocally: true });
@@ -1014,15 +1014,16 @@ async function talkStart() {
     const r = cur = new SR();
     Object.assign(r, { lang, continuous: true, processLocally: local });
     r.onresult = (e) => {
+      wait = 200;
       const said = [...e.results].slice(e.resultIndex).filter((x) => x.isFinal).map((x) => x[0].transcript).join(" ").trim();
       if (said) answer(r, said);
     };
     r.onerror = (e) => {
-      if (["not-allowed", "service-not-allowed", "language-not-supported", "network"].includes(e.error)) {
+      if (["not-allowed", "service-not-allowed", "language-not-supported"].includes(e.error)) {
         chat = false; toast("Can't turn speech into text here (" + e.error + "), so it repeats you instead", true);
-      }
+      } else if (e.error === "network") wait = Math.min(wait * 2, 10000);  // the speech service blipped: back off, keep trying
     };
-    r.onend = () => { cur = null; setTimeout(hear, 200); };  // recognition stops on its own after a while: keep listening
+    r.onend = () => { cur = null; setTimeout(hear, wait); };  // recognition stops on its own after a while: keep listening
     r.start();
   };
   const answer = async (r, said) => {
@@ -1044,7 +1045,7 @@ async function talkStart() {
         speechSynthesis.speak(u);
       }
     } catch (err) {
-      chat = false; done(); toast(err.message + ". Repeating you until then.", true);
+      done(); toast("The cat didn't catch that: " + err.message, true);  // keep chatting; one failed reply isn't fatal
     }
   };
   const ctx = new AudioContext(), sr = ctx.sampleRate, N = 2048;
