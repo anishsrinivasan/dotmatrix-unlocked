@@ -572,6 +572,8 @@ class Cat:
             return 0.0
         if mode == "listen":
             self.napping = False
+            if self.busy(t) and self.trick[0] not in ("listen", "speak"):
+                return 0.0  # it's doing a trick (maybe the one you asked for): finish it, ears up after
             return self._start("listen", t, extend=True)
         if mode != "speak" or not isinstance(env, list) or not 0 < len(env) <= 30 * TALK_HZ:
             raise ValueError("talk: listen | speak with env (up to 30 s of levels) | done")
@@ -710,6 +712,9 @@ if __name__ == "__main__":
     assert abs(c.answer("hi", "Meow there.", 3, tone)[2] - (34 / TALK_HZ + 0.3)) < 0.01
     msgs = c.prompt("hi")
     assert msgs[0]["role"] == "system" and msgs[-1] == {"role": "user", "content": "hi"} and len(msgs) == 8
+    w, trick, secs = c.answer("do a flip", "Fine. [flip]", 20.0)
+    c.do(trick, 20 + secs)
+    assert c.talk("listen", 20 + secs + 0.6) == 0 and c.trick[0] == "flip"  # hearing you doesn't cancel the trick
     assert c.do("flip", 10.0) == 2.6 and c.busy(11) and not c.busy(12.7)
     # needs drift, and it asks for the lowest one
     n = Cat(0, 3)

@@ -547,6 +547,7 @@ class Handler(BaseHTTPRequestHandler):
                         except (OSError, KeyError, IndexError, ValueError) as e:  # the browser's voice will do
                             log.warning("cat voice: %s", e)
                     words, trick, dur = state.cat.answer(said, reply, time.time(), pcm)
+                    log.info("cat heard %r, said %r, trick %s, voice %.1fs", said, words, trick, len(pcm) / 48000)
                     if trick:  # it acts on what you said once it's done talking
                         threading.Timer(dur, state.cat.do, (trick, now + dur)).start()
                     state.cat_until = max(state.cat_until, time.time() + dur + (8 if trick else 0))

@@ -2,6 +2,12 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.16 · 2026-10-20
+
+### Fixed
+- Tricks you asked for by voice never showed: the moment the cat stopped talking, the microphone heard you or the
+  room and put its ears up to listen, which cancelled the trick. Tricks now play to the end first.
+
 ## 0.1.15 · 2026-10-20
 
 ### Changed
