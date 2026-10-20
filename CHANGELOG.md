@@ -2,6 +2,12 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.17 · 2026-10-20
+
+### Fixed
+- Short tricks asked for by voice (a flip) still didn't show: they were timed from when you finished speaking, not
+  from when the cat finished answering, so they were already over when they started.
+
 ## 0.1.16 · 2026-10-20
 
 ### Fixed
