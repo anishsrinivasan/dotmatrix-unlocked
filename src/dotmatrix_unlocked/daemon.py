@@ -51,7 +51,9 @@ DEFAULTS = {**render.DEFAULT_CFG, "skin": "dashboard", "brightness": 80, "gamma"
             "saved_skins": {}, "game": "snake", "vis_style": "bars",
             "markets": ["GOLD", "SILVER", "USDINR", "AAPL", "NVDA"], "markets_vs": "prev", "markets_show": "both", "lyrics_offset": 0.0,
             "cat_ai_url": "https://openrouter.ai/api/v1", "cat_ai_model": "anthropic/claude-haiku-5.5", "cat_ai_key": "",
-            "cat_voice": "openai/gpt-audio-mini"}  # "" = the browser's own voice
+            "cat_voice": "openai/gpt-audio-mini",
+            # the panel's built-in clock, shown while the computer sleeps. Styles are firmware faces 0-7.
+            "sleep_clock": {"on": True, "style": 0, "color": [255, 170, 60], "date": True}}  # "" = the browser's own voice
 
 # Hook event -> session state. https://code.claude.com/docs/en/hooks
 INPUT_NOTIFICATIONS = {"permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"}
@@ -205,6 +207,11 @@ def validated(cfg: dict, patch: dict) -> dict:
             if not isinstance(v, dict) or len(v) > 30:
                 raise ValueError("saved_skins: up to 30 named layouts")
             new[k] = {str(n).strip()[:24]: _layout(l) for n, l in v.items() if str(n).strip()}
+        elif k == "sleep_clock":
+            v = {**cfg["sleep_clock"], **v}
+            if int(v["style"]) not in range(8):
+                raise ValueError("sleep_clock: style 0-7")
+            new[k] = {"on": bool(v["on"]), "style": int(v["style"]), "color": list(_rgb(v["color"])), "date": bool(v["date"])}
         elif k in ("clock_24h", "interrupt_on_input"):
             new[k] = bool(v)
         elif k == "city":
@@ -262,6 +269,8 @@ class State:
         self.markets_wake: asyncio.Event | None = None
         self.asleep = False  # the computer is about to sleep: the panel runs its own clock until we're back
         self.handed = threading.Event()
+        self.clock_try = 0.0  # "Show on panel" in Settings: its own clock until then
+        self.clock_sent = False
         self.markets_draft: tuple[list[str], str] = ([], "prev")  # what the preview shows
         self.lyrics: tuple[str, list | None] = ("", None)  # (track key, synced lines; [] = none found)
         self.lyrics_wanted = 0.0  # last time the karaoke skin was previewed
@@ -653,6 +662,9 @@ class Handler(BaseHTTPRequestHandler):
                 buf = io.BytesIO()
                 payload.save(buf, format="PNG")
                 return self._send(200, buf.getvalue(), "image/png")
+            if self.path == "/clock/try":
+                state.clock_sent, state.clock_try = False, time.time() + 10
+                return self._json(200, {"ok": True})
             if self.path == "/config":
                 new = validated(state.cfg, body)
                 city_changed = new["city"] != state.cfg["city"]
@@ -805,6 +817,7 @@ async def music_loop() -> None:
 
 def _before_sleep() -> None:
     state.handed.clear()
+    state.clock_sent = False
     state.asleep = True
     state.handed.wait(6)  # the display loop sends the clock; the Mac waits for us
 
@@ -826,15 +839,16 @@ async def display_loop(fake: bool) -> None:
             if dev:
                 await dev.disconnect()
             dev = device.FakeDevice() if fake else device.Device(want)
-        if state.asleep:  # frames would freeze mid-sleep, so leave the panel on its own ticking clock
-            if dev.connected and not state.handed.is_set():
+        if state.asleep or time.time() < state.clock_try:  # frames would freeze mid-sleep: the panel ticks on its own
+            sc = state.cfg["sleep_clock"]
+            if dev.connected and not state.clock_sent and (sc["on"] or not state.asleep):
                 try:
-                    clock = next((m for m in state.cfg["layout"] if "clock" in m["id"]), {})
-                    await asyncio.wait_for(dev.own_clock(datetime.now(), state.cfg["clock_24h"],
-                                                         clock.get("color", (255, 170, 60))), 5)
-                    log.info("going to sleep: panel switched to its own clock")
+                    await asyncio.wait_for(dev.own_clock(datetime.now(), state.cfg["clock_24h"], sc["color"],
+                                                         sc["style"], sc["date"]), 5)
+                    log.info("panel switched to its own clock%s", " for sleep" if state.asleep else "")
                 except Exception as e:
                     log.warning("couldn't hand the panel its clock: %r", e)
+            state.clock_sent = True
             state.handed.set()
             state.last_ack, last_sig = time.monotonic(), None  # resend the dashboard on wake
             await asyncio.sleep(0.1)

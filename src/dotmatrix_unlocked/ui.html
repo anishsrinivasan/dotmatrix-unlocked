@@ -570,6 +570,19 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
       </section>
 
       <section class="card">
+        <h2>While the Mac sleeps</h2>
+        <div class="row"><div><label for="scOn">Show the panel's own clock</label><small>Keeps the right time with the laptop asleep; the dashboard returns on wake</small></div>
+          <label class="switch"><input type="checkbox" id="scOn"><span></span></label></div>
+        <div class="row"><label for="scStyle">Clock face</label>
+          <select id="scStyle"><option value="0">Default</option><option value="1">Christmas</option><option value="2">Racing</option>
+            <option value="3">Inverted</option><option value="4">Hourglass</option><option value="5">Frame 1</option>
+            <option value="6">Frame 2</option><option value="7">Frame 3</option></select></div>
+        <div class="row"><label for="scColor">Color</label><input type="color" id="scColor"></div>
+        <div class="row"><label for="scDate">Show the date</label><label class="switch"><input type="checkbox" id="scDate"><span></span></label></div>
+        <div class="row"><small>Uses the 24-hour setting from the Dashboard</small><button class="btn" id="scTry">Show on panel for 10s</button></div>
+      </section>
+
+      <section class="card">
         <h2>Background</h2>
         <div class="row"><div><label for="bgSwitch">Run in the background</label><small id="bgStatus">Keeps the panel going with no terminal open, and starts it when you log in</small></div>
           <label class="switch"><input type="checkbox" id="bgSwitch"><span></span></label></div>
@@ -688,6 +701,8 @@ function render() {
   $("previewBadge").classList.toggle("draft", ch.length > 0);
   $("aiKey").placeholder = applied.cat_ai_key ? "OpenRouter key saved (paste to replace)" : "OpenRouter API key";
   if (document.activeElement !== $("aiModel")) $("aiModel").value = applied.cat_ai_model;
+  const sc = applied.sleep_clock;
+  $("scOn").checked = sc.on; $("scStyle").value = sc.style; $("scColor").value = hex(sc.color); $("scDate").checked = sc.date;
   $("giphyKeyBox").hidden = !!applied.giphy_key; $("giphySearchBox").hidden = !applied.giphy_key;
 }
 
@@ -947,6 +962,13 @@ $("aiSave").onclick = async () => {
     $("aiKey").value = ""; render(); toast("Saved. Turn on Talk to the cat and say hi");
   } catch (e) { toast(e.message, true); }
 };
+async function saveSleepClock() {
+  const sleep_clock = { on: $("scOn").checked, style: +$("scStyle").value, color: rgb($("scColor").value), date: $("scDate").checked };
+  try { applied.sleep_clock = draft.sleep_clock = (await api("/config", { sleep_clock })).sleep_clock; render(); }
+  catch (e) { toast(e.message, true); }
+}
+["scOn", "scStyle", "scColor", "scDate"].forEach((id) => ($(id).onchange = saveSleepClock));
+$("scTry").onclick = () => api("/clock/try", {}).then(() => toast("Panel shows its clock for 10 seconds"), (e) => toast(e.message, true));
 $("giphyKeyReset").onclick = () => { $("giphyKeyBox").hidden = false; };
 $("giphyGo").onclick = giphySearch;
 $("giphyQ").onkeydown = (e) => { if (e.key === "Enter") giphySearch(); };

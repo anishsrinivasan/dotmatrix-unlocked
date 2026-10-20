@@ -114,6 +114,12 @@ def test_fake_device_end_to_end(tmp_path):
             with pytest.raises(urllib.error.HTTPError) as e:
                 call("/config", bad)
             assert e.value.code == 400, bad
+        sc = json.loads(call("/config", {"sleep_clock": {"style": 4, "color": "#00ff80"}})[1])["sleep_clock"]
+        assert sc == {"on": True, "style": 4, "color": [0, 255, 128], "date": True}
+        with pytest.raises(urllib.error.HTTPError) as e:
+            call("/config", {"sleep_clock": {"style": 9}})
+        assert e.value.code == 400
+        assert json.loads(call("/clock/try", {})[1])["ok"]
         code, png = call("/cat/view")
         assert code == 200 and png[:4] == b"\x89PNG"
         cat = json.loads(call("/status")[1])["cat"]

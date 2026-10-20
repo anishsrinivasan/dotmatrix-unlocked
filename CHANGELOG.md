@@ -2,6 +2,12 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.21 · 2026-10-20
+
+### Added
+- Settings → While the Mac sleeps: pick the panel's own clock face (8 built-in styles), its color and whether it
+  shows the date, or turn it off. "Show on panel for 10s" lets you see it without putting the Mac to sleep.
+
 ## 0.1.20 · 2026-10-20
 
 ### Fixed

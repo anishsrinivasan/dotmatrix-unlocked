@@ -132,12 +132,12 @@ class Device:
     async def ping(self) -> bool:
         return await self.send(bytes([5, 0, 7, 1, 1]), ACK_SCREEN_ON)  # screen on: harmless, always echoed
 
-    async def own_clock(self, now, hour24: bool, rgb) -> bool:
+    async def own_clock(self, now, hour24: bool, rgb, style: int = 0, date: bool = True) -> bool:
         """Hand the panel to its built-in clock (set to now) so the time keeps moving while we can't send frames."""
         await self.send(bytes([5, 0, 4, 1, 0]))  # leave DIY image mode
         await self.send(bytes([11, 0, 1, 128, now.year % 100, now.month, now.day, now.isoweekday(),
                                now.hour, now.minute, now.second]))
-        return await self.send(bytes([8, 0, 6, 1, 128 | (64 if hour24 else 0), *rgb]), ACK_CLOCK)
+        return await self.send(bytes([8, 0, 6, 1, style | (128 if date else 0) | (64 if hour24 else 0), *rgb]), ACK_CLOCK)
 
     async def brightness(self, pct: int) -> bool:
         return await self.send(bytes([5, 0, 4, 128, max(5, min(100, pct))]), ACK_BRIGHTNESS)

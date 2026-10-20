@@ -1,6 +1,6 @@
 [project]
 name = "dotmatrix-unlocked"
-version = "0.1.20"
+version = "0.1.21"
 description = "Drive an iDotMatrix-compatible 32x32 LED panel from your computer: dashboard, Claude Code activity, music, visualizer, games and a mischievous cat."
 readme = "README.md"
 license = "GPL-3.0-or-later"
