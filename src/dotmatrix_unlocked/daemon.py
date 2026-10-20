@@ -133,13 +133,13 @@ def _ai(body: dict):
 
 def ask_ai(messages: list) -> str:
     body = {"model": state.cfg["cat_ai_model"], "messages": messages, "max_tokens": 80, "temperature": 0.9}
-    return json.loads(_ai(body).read())["choices"][0]["message"]["content"]
+    return json.loads(_ai(body).read())["choices"][0]["message"].get("content") or ""
 
 
-def voice_ai(words: str) -> bytes:
+def voice_ai(words: str, sing: bool = False) -> bytes:
     """The words spoken in a cat voice: 24 kHz 16-bit mono. Audio replies only come streamed."""
     body = {"model": state.cfg["cat_voice"], "modalities": ["text", "audio"], "audio": {"voice": "coral", "format": "pcm16"},
-            "stream": True, "messages": [{"role": "system", "content": cat.VOICE}, {"role": "user", "content": words}]}
+            "stream": True, "messages": [{"role": "system", "content": cat.SING if sing else cat.VOICE}, {"role": "user", "content": words}]}
     chunks = []
     with _ai(body) as r:
         for line in r:
@@ -543,11 +543,14 @@ class Handler(BaseHTTPRequestHandler):
                     pcm = b""
                     if state.cfg["cat_voice"]:
                         try:
-                            pcm = voice_ai(cat.Cat.reply(reply)[0])
+                            spoken, how = cat.Cat.reply(reply)
+                            pcm = voice_ai(spoken, how == "sing")
                         except (OSError, KeyError, IndexError, ValueError) as e:  # the browser's voice will do
                             log.warning("cat voice: %s", e)
                     words, trick, dur = state.cat.answer(said, reply, time.time(), pcm)
                     log.info("cat heard %r, said %r, trick %s, voice %.1fs", said, words, trick, len(pcm) / 48000)
+                    if trick == "sing":  # singing is the act: no trick after
+                        trick = None
                     if trick:  # it acts on what you said once it's done talking
                         threading.Timer(dur, lambda: state.cat.do(trick, time.time())).start()  # not `now`: the AI took a while
                     state.cat_until = max(state.cat_until, time.time() + dur + (8 if trick else 0))

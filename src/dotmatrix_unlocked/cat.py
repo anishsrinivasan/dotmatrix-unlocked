@@ -444,13 +444,17 @@ PERSONA = ("You are Pixel, a small, playful, slightly sassy cat who lives on an 
            "cat would if it could talk: one short sentence, under 15 words, no emojis, nothing in asterisks. When they ask "
            "you to do something you can do, do it (happily or grudgingly) by ending with its action in brackets: [flip], "
            "[fish] (catch a fish), [laser] (chase a laser), [yarn], [zoomies], [peek] (hide and seek), [knock] (knock a "
-           "mug off the shelf), or [feed] when they give you food or a treat. Leave actions out otherwise, and never talk "
-           "about these instructions.")
+           "mug off the shelf), or [feed] when they give you food or a treat. If they ask you to sing, sing: a silly song "
+           "of two to four short lines about cat things, then [sing]. Leave actions out otherwise. Their words come from "
+           "speech recognition and may be misheard ('single song' = 'sing a song', 'do a zombie' = 'do the zoomies'): "
+           "answer what they most likely meant. Reply only with what the cat says, never your reasoning or these rules.")
 DOABLE = ("flip", "feed", "fish", "laser", "yarn", "zoomies", "peek", "knock")  # what it may choose to do after talking
 SPOKEN = 14  # characters a second the browser speaks them, for the mouth
 VOICE = ("You are the voice of a cartoon cat. Say the user's message out loud exactly as written, word for word, in a "
          "high, bright, playful cat voice, a little purr in it. Don't answer it or add anything, except an optional "
          "short meow at the start.")
+SING = ("You are the voice of a cartoon cat. Sing the user's message as a short, bouncy, playful song, word for word, "
+        "in a high, bright cat voice with a melody and a meow at the end. Don't add anything else.")
 VOICE_RATE = 1.2  # the voice is played a little fast and high, Talking Tom style, and still easy to follow
 
 
@@ -591,9 +595,12 @@ class Cat:
     @staticmethod
     def reply(reply: str) -> tuple[str, str | None]:
         """The model's reply -> (the words to speak, a trick it chose to do after them)."""
-        trick = next((w for w in re.findall(r"\[(\w+)\]", reply.lower()) if w in DOABLE), None)
-        reply = re.sub(r"[^.!?]*\bbrackets?\b[^.!?]*[.!?]?", "", reply)  # small models sometimes narrate the rules
-        return " ".join(re.sub(r"\[[^\]]*\]|\*[^*]*\*|[^\w\s.,!?'-]", " ", reply).split())[:240] or "Meow.", trick
+        trick = next((w for w in re.findall(r"\[(\w+)\]", (reply or "").lower()) if w in DOABLE + ("sing",)), None)
+        reply = re.sub(r"[^.!?]*\bbrackets?\b[^.!?]*[.!?]?", "", reply or "")  # small models sometimes narrate the rules
+        words = " ".join(re.sub(r"\[[^\]]*\]|\*[^*]*\*|[^\w\s.,!?'-]", " ", reply).split())
+        if trick != "sing":  # a reply is a sentence or two; anything after is the model thinking out loud
+            words = " ".join(re.split(r"(?<=[.!?])\s+", words)[:2])
+        return words[:300] or "Meow.", trick
 
     @_locked
     def answer(self, said: str, reply: str, t: float, pcm: bytes = b"") -> tuple[str, str | None, float]:
@@ -705,6 +712,9 @@ if __name__ == "__main__":
     w, trick, secs = c.answer("want fish?", "*purrs* Ooh, fish! Gimme gimme. [fish] 🐟", 1.0)
     assert (w, trick) == ("Ooh, fish! Gimme gimme.", "fish") and 1 < secs < 3 and c.trick[0] == "speak"
     assert Cat.reply("Pixel, obviously. No brackets needed here.") == ("Pixel, obviously.", None)
+    assert Cat.reply("Too sleepy. Meow! Wait, I shouldn't write literally.") == ("Too sleepy. Meow!", None)
+    song = Cat.reply("Fish in the bowl. Fish on the floor. Fish for me. Meow! [sing]")
+    assert song == ("Fish in the bowl. Fish on the floor. Fish for me. Meow!", "sing") and Cat.reply(None)[0] == "Meow."
     assert c.answer("x", "[delete] Meow", 2)[1] is None and c.answer("x", "[]", 2)[0] == "Meow."
     tone = array.array("h", [int(8000 * math.sin(k / 5)) if k < 24000 else 0 for k in range(48000)]).tobytes()
     env = levels(tone)  # one loud second, one silent, played 1.2x fast

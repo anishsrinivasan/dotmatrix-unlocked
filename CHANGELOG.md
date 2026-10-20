@@ -2,6 +2,17 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.18 · 2026-10-20
+
+### Added
+- Ask the cat to sing and it sings: a short silly cat song, sung (not read) by the voice model.
+
+### Fixed
+- Misheard requests ("single song" for "sing a song", "do a zombie" for "do the zoomies") got confused replies.
+  The cat now answers what you most likely meant.
+- The cat sometimes read out the AI's reasoning after its answer. Replies are cut to what the cat says.
+- An empty reply from the AI failed the request instead of getting a "Meow."
+
 ## 0.1.17 · 2026-10-20
 
 ### Fixed
