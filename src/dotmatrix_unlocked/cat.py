@@ -593,9 +593,11 @@ class Cat:
         return [{"role": "system", "content": f"{PERSONA} {feel}"}, *self.chat, {"role": "user", "content": said[:300]}]
 
     @staticmethod
-    def reply(reply: str) -> tuple[str, str | None]:
-        """The model's reply -> (the words to speak, a trick it chose to do after them)."""
+    def reply(reply: str, said: str = "") -> tuple[str, str | None]:
+        """The model's reply -> (the words to speak, a trick to do after them, or "sing" to sing the words)."""
         trick = next((w for w in re.findall(r"\[(\w+)\]", (reply or "").lower()) if w in DOABLE + ("sing",)), None)
+        if re.search(r"\b(sing|song|songs|singing)\b", said, re.I):  # models forget the tag; asking is enough
+            trick = "sing"
         reply = re.sub(r"[^.!?]*\bbrackets?\b[^.!?]*[.!?]?", "", reply or "")  # small models sometimes narrate the rules
         words = " ".join(re.sub(r"\[[^\]]*\]|\*[^*]*\*|[^\w\s.,!?'-]", " ", reply).split())
         if trick != "sing":  # a reply is a sentence or two; anything after is the model thinking out loud
@@ -606,7 +608,7 @@ class Cat:
     def answer(self, said: str, reply: str, t: float, pcm: bytes = b"") -> tuple[str, str | None, float]:
         """Say the model's reply, the mouth following the voice (pcm) or, for the browser's voice, the vowels.
         Returns (the words to speak, a trick it chose to do after, seconds of talking)."""
-        words, trick = self.reply(reply)
+        words, trick = self.reply(reply, said)
         self.chat = (self.chat + [{"role": "user", "content": said[:300]}, {"role": "assistant", "content": reply[:300]}])[-6:]
         level = [0.9 if c in "aeiouy" else 0.5 if c.isalpha() else 0.05 for c in words.lower()]
         env = levels(pcm) if pcm else [level[int(i * SPOKEN / TALK_HZ)] for i in range(int(len(level) * TALK_HZ / SPOKEN))]
@@ -715,6 +717,7 @@ if __name__ == "__main__":
     assert Cat.reply("Too sleepy. Meow! Wait, I shouldn't write literally.") == ("Too sleepy. Meow!", None)
     song = Cat.reply("Fish in the bowl. Fish on the floor. Fish for me. Meow! [sing]")
     assert song == ("Fish in the bowl. Fish on the floor. Fish for me. Meow!", "sing") and Cat.reply(None)[0] == "Meow."
+    assert Cat.reply("La la. Fish. Meow.", "Single song") == ("La la. Fish. Meow.", "sing")
     assert c.answer("x", "[delete] Meow", 2)[1] is None and c.answer("x", "[]", 2)[0] == "Meow."
     tone = array.array("h", [int(8000 * math.sin(k / 5)) if k < 24000 else 0 for k in range(48000)]).tobytes()
     env = levels(tone)  # one loud second, one silent, played 1.2x fast

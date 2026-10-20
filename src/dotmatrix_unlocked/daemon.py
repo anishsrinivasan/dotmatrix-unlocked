@@ -132,7 +132,9 @@ def _ai(body: dict):
 
 
 def ask_ai(messages: list) -> str:
-    body = {"model": state.cfg["cat_ai_model"], "messages": messages, "max_tokens": 80, "temperature": 0.9}
+    # no hidden thinking: it ate the token budget, leaving empty or cut-off replies (and it's slower)
+    body = {"model": state.cfg["cat_ai_model"], "messages": messages, "max_tokens": 200, "temperature": 0.9,
+            "reasoning": {"enabled": False}}
     return json.loads(_ai(body).read())["choices"][0]["message"].get("content") or ""
 
 
@@ -543,12 +545,13 @@ class Handler(BaseHTTPRequestHandler):
                     pcm = b""
                     if state.cfg["cat_voice"]:
                         try:
-                            spoken, how = cat.Cat.reply(reply)
+                            spoken, how = cat.Cat.reply(reply, said)
                             pcm = voice_ai(spoken, how == "sing")
                         except (OSError, KeyError, IndexError, ValueError) as e:  # the browser's voice will do
                             log.warning("cat voice: %s", e)
                     words, trick, dur = state.cat.answer(said, reply, time.time(), pcm)
-                    log.info("cat heard %r, said %r, trick %s, voice %.1fs", said, words, trick, len(pcm) / 48000)
+                    log.info("cat heard %r, said %r, trick %s, voice %.1fs (model: %r)", said, words, trick, len(pcm) / 48000,
+                             reply[:300])
                     if trick == "sing":  # singing is the act: no trick after
                         trick = None
                     if trick:  # it acts on what you said once it's done talking

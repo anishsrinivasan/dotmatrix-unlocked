@@ -2,6 +2,14 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.19 · 2026-10-20
+
+### Fixed
+- The cat's replies were often empty ("Meow.") or cut off mid-sentence, which made it seem to ignore you or
+  forget tricks: the AI model spent its whole reply budget thinking silently. Thinking is now off, so it answers
+  fully, and faster.
+- Asking for a song sometimes got it read out instead of sung. Any request to sing now gets sung.
+
 ## 0.1.18 · 2026-10-20
 
 ### Added
