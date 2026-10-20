@@ -2,6 +2,18 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.15 · 2026-10-20
+
+### Changed
+- Talking to the cat opens a full-screen voice mode: the page dims and blurs, the cat's live panel sits in the
+  middle glowing with your voice (green) or its own (amber), and captions show your words as you say them and the
+  cat's reply. Mute and end buttons sit at the bottom; Esc also ends it.
+- The Cat card has one **Talk** button instead of two microphone switches. Claps still startle the cat when the
+  Visualizer's microphone is on.
+
+### Fixed
+- The cat sometimes said its own instructions out loud ("no brackets needed here").
+
 ## 0.1.14 · 2026-10-20
 
 ### Fixed

@@ -33,7 +33,7 @@ with a local web UI.
 **It reacts to you**
 - The cat has needs (food, energy, fun, love) and asks when one runs low. **Pet it** by stroking it in the web
   UI: head and chin get purrs, the belly is a trap until it trusts you, and too much petting earns a swat.
-- **Talk to the cat**, Talking Tom style: it answers what you say in a squeaky voice, its mouth moving on the
+- **Talk to the cat**, Talking Tom style, in a full-screen voice mode with live captions: it answers what you say in a squeaky voice, its mouth moving on the
   panel, and does a trick if you ask ("can you do a flip?"). Replies come from an AI model on
   [OpenRouter](https://openrouter.ai/keys): paste your key in the Cat card (Claude Haiku writes the reply, any model
   id works; `openai/gpt-audio-mini` voices it as a cartoon cat). Without a key, it repeats you back.

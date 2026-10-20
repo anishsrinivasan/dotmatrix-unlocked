@@ -248,6 +248,37 @@
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
   #toast.err { border-color: var(--coral); color: #ffd6d2; }
 
+  /* ---- voice mode: the room dims, the cat's panel glows with whoever is talking, captions underneath */
+  .talkBtn { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+  #aiKey { flex: 1.4; } #aiModel { flex: 1; min-width: 0; }
+  .voice { position: fixed; inset: 0; z-index: 20; display: grid; grid-template-rows: 1fr auto; justify-items: center;
+           align-items: center; padding: 24px 16px 36px; background: #0b0910c7;
+           backdrop-filter: blur(22px) saturate(1.3); -webkit-backdrop-filter: blur(22px) saturate(1.3); animation: voiceIn .25s ease-out; }
+  .voice[hidden] { display: none; }
+  @keyframes voiceIn { from { opacity: 0; } }
+  .voiceStage { display: flex; flex-direction: column; align-items: center; gap: 22px; width: min(600px, 100%); text-align: center; }
+  .halo { --lvl: 0; --glow: var(--mint); width: min(280px, 62vw); padding: 14px; border-radius: 26px;
+          background: linear-gradient(155deg, #2a2232, #0c0a10 70%);
+          box-shadow: 0 0 0 calc(1px + var(--lvl) * 12px) color-mix(in srgb, var(--glow) 25%, transparent),
+                      0 0 calc(24px + var(--lvl) * 80px) color-mix(in srgb, var(--glow) 40%, transparent);
+          transition: box-shadow .08s linear; }
+  .halo.thinking { --glow: var(--muted); animation: breathe 1.4s ease-in-out infinite; }
+  .halo.speaking { --glow: var(--amber); --lvl: .45; animation: breathe .6s ease-in-out infinite; }
+  .halo.muted { --glow: var(--faint); --lvl: 0; }
+  @keyframes breathe { 50% { transform: scale(1.025); filter: brightness(1.15); } }
+  .voiceState { margin: 0; font: 500 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+  .captions { min-height: 110px; display: grid; align-content: start; gap: 12px; }
+  .captions p { margin: 0; font-size: clamp(17px, 2.6vw, 22px); line-height: 1.4; text-wrap: balance; }
+  .captions .you { color: var(--muted); }
+  .captions .you.interim { color: var(--faint); }
+  .captions .cat { color: var(--text); font-weight: 500; }
+  .voiceBar { display: flex; gap: 20px; }
+  .round { width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+           background: var(--smoke-2); color: var(--text); border: 1px solid var(--edge-2); }
+  .round:hover { border-color: var(--muted); }
+  .round[aria-pressed="true"] { background: var(--text); color: var(--night); }
+  .round.end { background: var(--coral); border-color: #ff8b80; color: #1c0806; }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
   }
@@ -438,16 +469,15 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
           </div>
         </div>
         <p style="margin:0 0 10px" id="catMood">—</p>
-        <div class="row"><div><label for="talkToggle">Talk to the cat</label>
+        <div class="row"><div><label for="talkOpen">Talk to the cat</label>
           <small>Talk to it and it answers in a squeaky voice through this computer's speakers, and does a trick if
             you ask. Your browser turns your words into text (on this computer when it can, otherwise through Google for
             Chrome or Apple for Safari), and the text goes to an AI model on
             <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a> for its reply.
-            Without a key it repeats what you say. Works while this tab is open.</small></div>
-          <label class="switch"><input type="checkbox" id="talkToggle"><span></span></label></div>
-        <div class="meter" style="margin-bottom:10px"><i id="talkMeter"></i></div>
-        <div class="inline" style="margin-bottom:14px"><input type="password" id="aiKey" autocomplete="off" aria-label="OpenRouter API key">
-          <input id="aiModel" aria-label="Model" placeholder="Model" spellcheck="false">
+            Without a key it repeats what you say.</small></div>
+          <button class="btn talkBtn" id="talkOpen"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg> Talk</button></div>
+        <div class="inline" style="margin:10px 0 14px"><input type="password" id="aiKey" autocomplete="off" aria-label="OpenRouter API key">
+          <input type="text" id="aiModel" aria-label="Model" placeholder="Model" spellcheck="false">
           <button class="btn" id="aiSave">Save</button></div>
         <p class="sub">Tricks <span>play right away, even over other skins</span></p>
         <div class="chips" id="tricks"></div>
@@ -456,11 +486,7 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
           Treats fill it up, games cheer it up and use up energy. It also reacts to your Mac: waves when Claude needs you,
           types along while Claude works, dances to music, naps when you're away 5 min (1 min after 11pm) and greets you
           when you're back. Otherwise: random mischief.
-          With the microphone on, claps startle it.</p>
-        <div class="row mic"><div><label>Listen with this browser's microphone</label>
-          <small>Sound stays in the browser; only levels reach the display. Works while this tab is open.</small></div>
-          <label class="switch"><input type="checkbox" class="micToggle"><span></span></label></div>
-        <div class="meter"><i class="micMeter"></i></div>
+          With the Visualizer's microphone on, claps startle it.</p>
       </section>
       </div>
 
@@ -565,6 +591,17 @@ h1 small { font: 12px var(--mono); letter-spacing: 0; color: var(--faint); }
   <button class="btn ghost" id="discard">Discard</button>
   <button class="btn" id="apply">Apply to display</button>
 </div></div>
+<div class="voice" id="voice" hidden role="dialog" aria-modal="true" aria-label="Talking to the cat">
+  <div class="voiceStage">
+    <div class="halo" id="voiceHalo"><div class="led"><img id="voiceCat" alt="Your cat, live"></div></div>
+    <p class="voiceState" id="voiceState" aria-live="polite"></p>
+    <div class="captions" aria-live="polite"><p class="you" id="voiceYou"></p><p class="cat" id="voiceSays"></p></div>
+  </div>
+  <div class="voiceBar">
+    <button class="round" id="voiceMute" aria-pressed="false" aria-label="Mute microphone"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+    <button class="round end" id="voiceEnd" aria-label="End conversation"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  </div>
+</div>
 <div id="toast" role="status"></div>
 
 <script>
@@ -996,6 +1033,13 @@ document.querySelectorAll(".micToggle").forEach((t) => (t.onchange = async (e) =
   catch (err) { setMicToggles(false); toast("Microphone blocked: " + err.message, true); }
 }));
 
+const vui = {  // the voice-mode overlay
+  state: (cls, label) => { $("voiceHalo").className = "halo " + cls; $("voiceState").textContent = label; },
+  you: (text, interim = false) => { $("voiceYou").textContent = text; $("voiceYou").classList.toggle("interim", interim); },
+  says: (text) => { $("voiceSays").textContent = text; },
+};
+const LISTENING = () => vui.state("", talk?.chat === false ? "Listening · it repeats you" : "Listening");
+
 // ---- Talking Tom: hears you and answers squeaky. With speech recognition and a local AI it replies to what you
 // said (the browser speaks the AI's words); without, it plays your own voice back sped up. Only loudness and text leave this tab.
 const SQUEAK = 1.6;  // playback rate: higher and a little faster, like Talking Tom
@@ -1010,17 +1054,19 @@ async function talkStart() {
     if (a === "available") local = true; else if (a === "downloadable") SR.install({ langs: [lang], processLocally: true });
   } catch {}
   const hear = () => {
-    if (!chat || speaking || cur || talk?.stream !== stream) return;
+    if (!chat || speaking || cur || talk?.stream !== stream || talk.muted) return;
     const r = cur = new SR();
     Object.assign(r, { lang, continuous: true, processLocally: local });
     r.onresult = (e) => {
       wait = 200;
-      const said = [...e.results].slice(e.resultIndex).filter((x) => x.isFinal).map((x) => x[0].transcript).join(" ").trim();
-      if (said) answer(r, said);
+      let said = "", partial = "";
+      for (const x of [...e.results].slice(e.resultIndex)) x.isFinal ? (said += x[0].transcript) : (partial += x[0].transcript);
+      if (partial.trim()) { vui.you(partial.trim(), true); vui.says(""); }
+      if (said.trim()) answer(r, said.trim());
     };
     r.onerror = (e) => {
       if (["not-allowed", "service-not-allowed", "language-not-supported"].includes(e.error)) {
-        chat = false; toast("Can't turn speech into text here (" + e.error + "), so it repeats you instead", true);
+        chat = talk.chat = false; LISTENING(); toast("Can't turn speech into text here (" + e.error + "), so it repeats you instead", true);
       } else if (e.error === "network") wait = Math.min(wait * 2, 10000);  // the speech service blipped: back off, keep trying
     };
     r.onend = () => { cur = null; setTimeout(hear, wait); };  // recognition stops on its own after a while: keep listening
@@ -1028,10 +1074,12 @@ async function talkStart() {
   };
   const answer = async (r, said) => {
     speaking = true; r.abort();  // don't hear its own voice
-    const done = () => { speaking = false; deaf = talk ? talk.ctx.currentTime + 0.4 : 0; hear(); };
+    vui.you(said); vui.says(""); vui.state("thinking", "Thinking");
+    const done = () => { speaking = false; deaf = talk ? talk.ctx.currentTime + 0.4 : 0; if (talk) { LISTENING(); hear(); } };
     try {
       const { reply, audio, rate } = await api("/cat", { ask: said });
-      deaf = Infinity;
+      if (!talk) return;
+      deaf = Infinity; vui.says(reply); vui.state("speaking", "Pixel is talking");
       if (audio) {  // the cat's voice: 24 kHz 16-bit mono, played a little fast and high
         const pcm = new Int16Array(Uint8Array.from(atob(audio), (c) => c.charCodeAt(0)).buffer);
         const buf = ctx.createBuffer(1, pcm.length, 24000);
@@ -1055,7 +1103,8 @@ async function talkStart() {
     const x = e.inputBuffer.getChannelData(0), secs = N / sr;
     let sum = 0; for (let i = 0; i < x.length; i++) sum += x[i] * x[i];
     const rms = Math.sqrt(sum / x.length), loud = rms > Math.max(0.015, floor * 4);
-    $("talkMeter").style.width = Math.min(100, rms * 400) + "%";
+    if (talk?.muted) return;
+    if (!speaking) $("voiceHalo").style.setProperty("--lvl", Math.min(1, rms * 9).toFixed(2));
     if (ctx.currentTime < deaf) return;  // it's talking: don't hear itself
     if (!rec) {
       if (!loud) floor = floor * 0.95 + rms * 0.05;  // room noise, so a fan doesn't count as talking
@@ -1080,20 +1129,35 @@ async function talkStart() {
     const play = Object.assign(ctx.createBufferSource(), { buffer: buf });
     play.playbackRate.value = SQUEAK; play.connect(ctx.destination); play.start();
     deaf = ctx.currentTime + buf.duration / SQUEAK + 0.4;
+    vui.state("speaking", "Repeating you"); play.onended = () => talk && LISTENING();
     api("/cat", { talk: "speak", env: env.slice(0, 600).map((v) => +(v / peak).toFixed(2)) }).catch(() => {});
   };
   ctx.createMediaStreamSource(stream).connect(node); node.connect(ctx.destination);  // outputs silence; must be connected to run
-  talk = { stream, ctx };
-  hear();
+  talk = { stream, ctx, chat, muted: false, hear, quiet: () => cur?.abort() };
+  LISTENING(); hear();
 }
-$("talkToggle").onchange = async (e) => {
-  if (!e.target.checked) {
-    if (talk) { talk.stream.getTracks().forEach((t) => t.stop()); talk.ctx.close(); talk = null; speechSynthesis.cancel(); }
-    $("talkMeter").style.width = "0"; return;
+async function voiceOpen() {
+  vui.state("thinking", "Starting"); vui.you(""); vui.says("Say something to Pixel");
+  $("voiceMute").setAttribute("aria-pressed", "false"); $("voice").hidden = false; $("voiceEnd").focus();
+  try { await talkStart(); }
+  catch (err) { voiceClose(); toast("Microphone blocked: " + err.message, true); }
+}
+function voiceClose() {
+  if (talk) {
+    const t = talk; talk = null;
+    t.quiet(); t.stream.getTracks().forEach((x) => x.stop()); t.ctx.close(); speechSynthesis.cancel();
+    api("/cat", { talk: "done" }).catch(() => {});
   }
-  try { await talkStart(); toast("Say something to the cat"); }
-  catch (err) { e.target.checked = false; toast("Microphone blocked: " + err.message, true); }
+  $("voice").hidden = true; $("talkOpen").focus();
+}
+$("talkOpen").onclick = voiceOpen;
+$("voiceEnd").onclick = voiceClose;
+$("voiceMute").onclick = (e) => {
+  if (!talk) return;
+  talk.muted = !talk.muted; e.currentTarget.setAttribute("aria-pressed", talk.muted);
+  if (talk.muted) { talk.quiet(); vui.state("muted", "Muted"); } else { LISTENING(); talk.hear(); }
 };
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("voice").hidden) voiceClose(); });
 
 // ---- LED glow: a blurred copy of the preview blooms into the gaps between dots
 new MutationObserver(() => (document.querySelector(".bloom").src = $("draftPreview").src))
@@ -1176,7 +1240,11 @@ function renderCat(c) {
     }).catch((err) => toast(err.message, true));
   });
   pad.addEventListener("pointerleave", () => { last = null; travel = 0; });
-  setInterval(() => { if (!$("catCard").hidden && !document.hidden) $("catView").src = "/cat/view?" + Date.now(); }, 250);
+  setInterval(() => {
+    if (document.hidden) return;
+    if (!$("voice").hidden) $("voiceCat").src = "/cat/view?" + Date.now();
+    else if (!$("catCard").hidden) $("catView").src = "/cat/view?" + Date.now();
+  }, 250);
 })();
 
 async function loadTricks() {

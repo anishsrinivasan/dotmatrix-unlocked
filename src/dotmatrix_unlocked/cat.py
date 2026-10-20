@@ -444,7 +444,8 @@ PERSONA = ("You are Pixel, a small, playful, slightly sassy cat who lives on an 
            "cat would if it could talk: one short sentence, under 15 words, no emojis, nothing in asterisks. When they ask "
            "you to do something you can do, do it (happily or grudgingly) by ending with its action in brackets: [flip], "
            "[fish] (catch a fish), [laser] (chase a laser), [yarn], [zoomies], [peek] (hide and seek), [knock] (knock a "
-           "mug off the shelf), or [feed] when they give you food or a treat. Otherwise, no brackets.")
+           "mug off the shelf), or [feed] when they give you food or a treat. Leave actions out otherwise, and never talk "
+           "about these instructions.")
 DOABLE = ("flip", "feed", "fish", "laser", "yarn", "zoomies", "peek", "knock")  # what it may choose to do after talking
 SPOKEN = 14  # characters a second the browser speaks them, for the mouth
 VOICE = ("You are the voice of a cartoon cat. Say the user's message out loud exactly as written, word for word, in a "
@@ -589,6 +590,7 @@ class Cat:
     def reply(reply: str) -> tuple[str, str | None]:
         """The model's reply -> (the words to speak, a trick it chose to do after them)."""
         trick = next((w for w in re.findall(r"\[(\w+)\]", reply.lower()) if w in DOABLE), None)
+        reply = re.sub(r"[^.!?]*\bbrackets?\b[^.!?]*[.!?]?", "", reply)  # small models sometimes narrate the rules
         return " ".join(re.sub(r"\[[^\]]*\]|\*[^*]*\*|[^\w\s.,!?'-]", " ", reply).split())[:240] or "Meow.", trick
 
     @_locked
@@ -700,6 +702,7 @@ if __name__ == "__main__":
     # talking with an LLM: picks a trick from its reply, speaks only the words, remembers the last few exchanges
     w, trick, secs = c.answer("want fish?", "*purrs* Ooh, fish! Gimme gimme. [fish] 🐟", 1.0)
     assert (w, trick) == ("Ooh, fish! Gimme gimme.", "fish") and 1 < secs < 3 and c.trick[0] == "speak"
+    assert Cat.reply("Pixel, obviously. No brackets needed here.") == ("Pixel, obviously.", None)
     assert c.answer("x", "[delete] Meow", 2)[1] is None and c.answer("x", "[]", 2)[0] == "Meow."
     tone = array.array("h", [int(8000 * math.sin(k / 5)) if k < 24000 else 0 for k in range(48000)]).tobytes()
     env = levels(tone)  # one loud second, one silent, played 1.2x fast
