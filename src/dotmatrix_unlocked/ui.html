@@ -1034,7 +1034,8 @@ async function talkStart() {
       if (audio) {  // the cat's voice: 24 kHz 16-bit mono, played a little fast and high
         const pcm = new Int16Array(Uint8Array.from(atob(audio), (c) => c.charCodeAt(0)).buffer);
         const buf = ctx.createBuffer(1, pcm.length, 24000);
-        buf.getChannelData(0).set(Float32Array.from(pcm, (v) => v / 32768));
+        const peak = pcm.reduce((m, v) => Math.max(m, Math.abs(v)), 1);  // voice comes in quiet: play it at full volume
+        buf.getChannelData(0).set(Float32Array.from(pcm, (v) => (v / peak) * 0.95));
         const play = Object.assign(ctx.createBufferSource(), { buffer: buf, onended: done });
         play.playbackRate.value = rate; play.connect(ctx.destination); play.start();
       } else {

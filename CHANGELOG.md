@@ -2,6 +2,11 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.13 · 2026-10-20
+
+### Fixed
+- The cat's voice was quiet. It now plays at full volume.
+
 ## 0.1.12 · 2026-10-20
 
 ### Changed
