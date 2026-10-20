@@ -156,6 +156,51 @@ def idle_seconds() -> float | None:
     return None
 
 
+# ---- sleep/wake: before() runs (blocking, keep it short) just before the Mac sleeps, after() on wake
+def on_sleep(before, after) -> bool:
+    """macOS only (IOKit power notifications on their own run loop thread). False where unsupported.
+    ponytail: Windows/Linux would need WM_POWERBROADCAST / logind; add if someone asks."""
+    if not MAC:
+        return False
+    import ctypes
+    import ctypes.util
+    import threading
+    iokit = ctypes.cdll.LoadLibrary(ctypes.util.find_library("IOKit"))
+    cf = ctypes.cdll.LoadLibrary(ctypes.util.find_library("CoreFoundation"))
+    iokit.IORegisterForSystemPower.restype = ctypes.c_uint32
+    iokit.IORegisterForSystemPower.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_void_p,
+                                               ctypes.POINTER(ctypes.c_uint32)]
+    iokit.IOAllowPowerChange.argtypes = [ctypes.c_uint32, ctypes.c_long]
+    iokit.IONotificationPortGetRunLoopSource.restype = ctypes.c_void_p
+    iokit.IONotificationPortGetRunLoopSource.argtypes = [ctypes.c_void_p]
+    cf.CFRunLoopGetCurrent.restype = ctypes.c_void_p
+    cf.CFRunLoopAddSource.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+    can_sleep, will_sleep, powered_on = 0xE0000270, 0xE0000280, 0xE0000300
+    root = ctypes.c_uint32(0)
+
+    @ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p)
+    def cb(_ref, _service, msg, arg):
+        try:
+            if msg == will_sleep:
+                before()
+            elif msg == powered_on:
+                after()
+        finally:
+            if msg in (can_sleep, will_sleep):  # macOS waits up to 30s for this
+                iokit.IOAllowPowerChange(root.value, arg or 0)
+
+    def run():
+        port, notifier = ctypes.c_void_p(), ctypes.c_uint32()
+        root.value = iokit.IORegisterForSystemPower(None, ctypes.byref(port), cb, ctypes.byref(notifier))
+        cf.CFRunLoopAddSource(cf.CFRunLoopGetCurrent(), iokit.IONotificationPortGetRunLoopSource(port),
+                              ctypes.c_void_p.in_dll(cf, "kCFRunLoopDefaultMode"))
+        cf.CFRunLoopRun()
+
+    on_sleep.cb = cb  # keep the C callback alive
+    threading.Thread(target=run, daemon=True, name="power").start()
+    return True
+
+
 # ---- background service: start at login, restart on crash
 LABEL = "io.github.dotmatrix-unlocked"
 

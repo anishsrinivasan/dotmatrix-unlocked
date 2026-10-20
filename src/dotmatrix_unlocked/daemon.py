@@ -260,6 +260,8 @@ class State:
         self.quotes: dict = {}  # (markets id, compare-with) -> (value, change %)
         self.markets_wanted = 0.0  # last time the markets skin was previewed
         self.markets_wake: asyncio.Event | None = None
+        self.asleep = False  # the computer is about to sleep: the panel runs its own clock until we're back
+        self.handed = threading.Event()
         self.markets_draft: tuple[list[str], str] = ([], "prev")  # what the preview shows
         self.lyrics: tuple[str, list | None] = ("", None)  # (track key, synced lines; [] = none found)
         self.lyrics_wanted = 0.0  # last time the karaoke skin was previewed
@@ -801,6 +803,17 @@ async def music_loop() -> None:
         await asyncio.sleep(MUSIC_POLL)
 
 
+def _before_sleep() -> None:
+    state.handed.clear()
+    state.asleep = True
+    state.handed.wait(6)  # the display loop sends the clock; the Mac waits for us
+
+
+def _after_sleep() -> None:
+    log.info("awake: back to the dashboard")
+    state.asleep = False
+
+
 async def display_loop(fake: bool) -> None:
     dev, last_sig, last_send, misses, backoff, level, live = None, None, 0.0, 0, 2, None, False
     while True:
@@ -813,6 +826,19 @@ async def display_loop(fake: bool) -> None:
             if dev:
                 await dev.disconnect()
             dev = device.FakeDevice() if fake else device.Device(want)
+        if state.asleep:  # frames would freeze mid-sleep, so leave the panel on its own ticking clock
+            if dev.connected and not state.handed.is_set():
+                try:
+                    clock = next((m for m in state.cfg["layout"] if "clock" in m["id"]), {})
+                    await asyncio.wait_for(dev.own_clock(datetime.now(), state.cfg["clock_24h"],
+                                                         clock.get("color", (255, 170, 60))), 5)
+                    log.info("going to sleep: panel switched to its own clock")
+                except Exception as e:
+                    log.warning("couldn't hand the panel its clock: %r", e)
+            state.handed.set()
+            state.last_ack, last_sig = time.monotonic(), None  # resend the dashboard on wake
+            await asyncio.sleep(0.1)
+            continue
         if time.monotonic() - state.last_ack > HARD_DEADLINE:
             log.error("no ack for %ds, exiting so the service manager restarts us", HARD_DEADLINE)
             os._exit(1)
@@ -907,4 +933,5 @@ async def main(port: int = PORT, fake: bool = False, open_browser: bool = False,
         import webbrowser
         webbrowser.open(url)
     state.loop = asyncio.get_running_loop()
+    system.on_sleep(_before_sleep, _after_sleep)
     await asyncio.gather(weather_loop(), music_loop(), idle_loop(), markets_loop(), display_loop(fake))

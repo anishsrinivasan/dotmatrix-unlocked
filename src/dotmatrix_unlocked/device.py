@@ -16,6 +16,7 @@ NOTIFY_UUID = "0000fa03-0000-1000-8000-00805f9b34fb"
 # Firmware echoes every command as 05 00 <cmd> <sub> 01.
 ACK_IMAGE = {bytes.fromhex(h) for h in ("0500010001", "0500000001", "0500010003")}  # next-block, image done, gif done
 ACK_SCREEN_ON = {bytes.fromhex("0500070101")}
+ACK_CLOCK = {bytes.fromhex("0500060101")}
 ACK_BRIGHTNESS = {bytes.fromhex("0500048001")}
 ADDRESS_FILE = system.config_dir() / "address"
 ACK_TIMEOUT = 1.0  # firmware ack is flaky; fall back to ~1s pacing
@@ -130,6 +131,13 @@ class Device:
 
     async def ping(self) -> bool:
         return await self.send(bytes([5, 0, 7, 1, 1]), ACK_SCREEN_ON)  # screen on: harmless, always echoed
+
+    async def own_clock(self, now, hour24: bool, rgb) -> bool:
+        """Hand the panel to its built-in clock (set to now) so the time keeps moving while we can't send frames."""
+        await self.send(bytes([5, 0, 4, 1, 0]))  # leave DIY image mode
+        await self.send(bytes([11, 0, 1, 128, now.year % 100, now.month, now.day, now.isoweekday(),
+                               now.hour, now.minute, now.second]))
+        return await self.send(bytes([8, 0, 6, 1, 128 | (64 if hour24 else 0), *rgb]), ACK_CLOCK)
 
     async def brightness(self, pct: int) -> bool:
         return await self.send(bytes([5, 0, 4, 128, max(5, min(100, pct))]), ACK_BRIGHTNESS)

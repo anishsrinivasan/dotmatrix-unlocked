@@ -2,6 +2,12 @@
 
 All notable changes to dotmatrix-unlocked. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.20 · 2026-10-20
+
+### Fixed
+- When the Mac went to sleep, the panel froze on the last frame with the wrong time. Just before sleep, the panel
+  now switches to its own built-in clock, set to the current time, and keeps ticking. On wake the dashboard comes back.
+
 ## 0.1.19 · 2026-10-20
 
 ### Fixed
